@@ -1,29 +1,9 @@
 {
   "version": 2,
   "name": "figma-clone",
-  "builds": [
-    {
-      "src": "*.html",
-      "use": "@vercel/static"
-    },
-    {
-      "src": "*.css",
-      "use": "@vercel/static"
-    },
-    {
-      "src": "*.js",
-      "use": "@vercel/static"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/$1"
-    }
-  ],
   "headers": [
     {
-      "source": "/(.*)",
+      "source": "/(.*\\.(?:css|js))$",
       "headers": [
         {
           "key": "Cache-Control",
@@ -32,7 +12,7 @@
       ]
     },
     {
-      "source": "/index.html",
+      "source": "/(.*)",
       "headers": [
         {
           "key": "Cache-Control",
