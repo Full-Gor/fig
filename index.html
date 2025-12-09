@@ -48,6 +48,9 @@
                         <a href="#" id="zoom-100">100%</a>
                     </div>
                 </div>
+                <div class="menu-item" id="help-btn">
+                    <span>Guide</span>
+                </div>
             </div>
         </div>
         <div class="top-bar-center">
@@ -358,6 +361,142 @@
 
     <!-- Toast Notifications -->
     <div class="toast-container" id="toast-container"></div>
+
+    <!-- Help/Guide Modal -->
+    <div class="modal hidden" id="help-modal">
+        <div class="modal-content help-modal">
+            <div class="help-header">
+                <span>Guide</span>
+                <button class="close-modal" id="close-help">&times;</button>
+            </div>
+            <div class="help-body">
+                <div class="help-section">
+                    <h3>Outils</h3>
+                    <div class="help-grid">
+                        <div class="help-item">
+                            <span class="help-key">V</span>
+                            <span class="help-desc">Sélection - Sélectionner et déplacer les éléments</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">H</span>
+                            <span class="help-desc">Main - Naviguer dans le canvas</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">R</span>
+                            <span class="help-desc">Rectangle - Créer des rectangles</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">O</span>
+                            <span class="help-desc">Ellipse - Créer des cercles et ellipses</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">L</span>
+                            <span class="help-desc">Ligne - Tracer des lignes droites</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">T</span>
+                            <span class="help-desc">Texte - Ajouter du texte</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">P</span>
+                            <span class="help-desc">Plume - Dessiner des tracés vectoriels</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">F</span>
+                            <span class="help-desc">Cadre - Créer des frames</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="help-section">
+                    <h3>Actions</h3>
+                    <div class="help-grid">
+                        <div class="help-item">
+                            <span class="help-key">Ctrl + C</span>
+                            <span class="help-desc">Copier la sélection</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">Ctrl + V</span>
+                            <span class="help-desc">Coller</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">Ctrl + X</span>
+                            <span class="help-desc">Couper la sélection</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">Ctrl + D</span>
+                            <span class="help-desc">Dupliquer</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">Ctrl + Z</span>
+                            <span class="help-desc">Annuler</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">Ctrl + Shift + Z</span>
+                            <span class="help-desc">Rétablir</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">Ctrl + A</span>
+                            <span class="help-desc">Tout sélectionner</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">Suppr</span>
+                            <span class="help-desc">Supprimer la sélection</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="help-section">
+                    <h3>Navigation</h3>
+                    <div class="help-grid">
+                        <div class="help-item">
+                            <span class="help-key">Molette</span>
+                            <span class="help-desc">Zoom avant / arrière</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">Ctrl + 0</span>
+                            <span class="help-desc">Réinitialiser le zoom à 100%</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">Ctrl + +</span>
+                            <span class="help-desc">Zoom avant</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">Ctrl + -</span>
+                            <span class="help-desc">Zoom arrière</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">Espace + Glisser</span>
+                            <span class="help-desc">Déplacer la vue</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">Clic molette</span>
+                            <span class="help-desc">Déplacer la vue</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="help-section">
+                    <h3>Calques</h3>
+                    <div class="help-grid">
+                        <div class="help-item">
+                            <span class="help-key">]</span>
+                            <span class="help-desc">Avancer d'un niveau</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">[</span>
+                            <span class="help-desc">Reculer d'un niveau</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">Ctrl + G</span>
+                            <span class="help-desc">Grouper</span>
+                        </div>
+                        <div class="help-item">
+                            <span class="help-key">Ctrl + Shift + G</span>
+                            <span class="help-desc">Dégrouper</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="app.js"></script>
 </body>

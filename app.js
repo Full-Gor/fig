@@ -1969,5 +1969,27 @@ document.getElementById('copy-action')?.addEventListener('click', copySelection)
 document.getElementById('paste-action')?.addEventListener('click', pasteClipboard);
 document.getElementById('delete-action')?.addEventListener('click', deleteSelection);
 
+// Help modal
+document.getElementById('help-btn')?.addEventListener('click', () => {
+    document.getElementById('help-modal').classList.remove('hidden');
+});
+
+document.getElementById('close-help')?.addEventListener('click', () => {
+    document.getElementById('help-modal').classList.add('hidden');
+});
+
+document.getElementById('help-modal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'help-modal') {
+        document.getElementById('help-modal').classList.add('hidden');
+    }
+});
+
+// Keyboard shortcut to open help (?)
+document.addEventListener('keydown', (e) => {
+    if (e.key === '?' && !state.isEditingText && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+        document.getElementById('help-modal').classList.toggle('hidden');
+    }
+});
+
 // Initialize history
 saveHistory();
