@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Figma Clone - Design Tool</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Top Menu Bar -->
+    <header class="top-bar">
+        <div class="top-bar-left">
+            <div class="logo">
+                <svg width="24" height="36" viewBox="0 0 38 57" fill="none">
+                    <path d="M19 28.5C19 23.2533 23.2533 19 28.5 19C33.7467 19 38 23.2533 38 28.5C38 33.7467 33.7467 38 28.5 38C23.2533 38 19 33.7467 19 28.5Z" fill="#1ABCFE"/>
+                    <path d="M0 47.5C0 42.2533 4.25329 38 9.5 38H19V47.5C19 52.7467 14.7467 57 9.5 57C4.25329 57 0 52.7467 0 47.5Z" fill="#0ACF83"/>
+                    <path d="M19 0V19H28.5C33.7467 19 38 14.7467 38 9.5C38 4.25329 33.7467 0 28.5 0H19Z" fill="#FF7262"/>
+                    <path d="M0 9.5C0 14.7467 4.25329 19 9.5 19H19V0H9.5C4.25329 0 0 4.25329 0 9.5Z" fill="#F24E1E"/>
+                    <path d="M0 28.5C0 33.7467 4.25329 38 9.5 38H19V19H9.5C4.25329 19 0 23.2533 0 28.5Z" fill="#A259FF"/>
+                </svg>
+            </div>
+            <div class="menu-items">
+                <div class="menu-item dropdown">
+                    <span>Fichier</span>
+                    <div class="dropdown-content">
+                        <a href="#" id="new-file">Nouveau fichier</a>
+                        <a href="#" id="save-file">Sauvegarder</a>
+                        <a href="#" id="export-file">Exporter</a>
+                    </div>
+                </div>
+                <div class="menu-item dropdown">
+                    <span>Édition</span>
+                    <div class="dropdown-content">
+                        <a href="#" id="undo-action">Annuler <span class="shortcut">Ctrl+Z</span></a>
+                        <a href="#" id="redo-action">Rétablir <span class="shortcut">Ctrl+Y</span></a>
+                        <a href="#" id="copy-action">Copier <span class="shortcut">Ctrl+C</span></a>
+                        <a href="#" id="paste-action">Coller <span class="shortcut">Ctrl+V</span></a>
+                        <a href="#" id="delete-action">Supprimer <span class="shortcut">Suppr</span></a>
+                    </div>
+                </div>
+                <div class="menu-item dropdown">
+                    <span>Vue</span>
+                    <div class="dropdown-content">
+                        <a href="#" id="zoom-in">Zoom + <span class="shortcut">Ctrl++</span></a>
+                        <a href="#" id="zoom-out">Zoom - <span class="shortcut">Ctrl+-</span></a>
+                        <a href="#" id="zoom-fit">Ajuster à l'écran</a>
+                        <a href="#" id="zoom-100">100%</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="top-bar-center">
+            <input type="text" class="file-name" value="Sans titre" id="file-name">
+        </div>
+        <div class="top-bar-right">
+            <button class="btn-share">Partager</button>
+            <button class="btn-present">▶ Présenter</button>
+            <div class="zoom-control">
+                <span id="zoom-level">100%</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <!-- Left Toolbar -->
+        <aside class="toolbar">
+            <div class="tool-group">
+                <button class="tool-btn active" data-tool="select" title="Sélection (V)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M4 4l16 8-8 2-2 8z"/>
+                    </svg>
+                </button>
+                <button class="tool-btn" data-tool="move" title="Déplacer (H)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2l4 4h-3v4h4V7l4 4-4 4v-3h-4v4h3l-4 4-4-4h3v-4H7v3l-4-4 4-4v3h4V6H8z"/>
+                    </svg>
+                </button>
+                <button class="tool-btn" data-tool="frame" title="Cadre (F)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M3 3h6v2H5v4H3V3zm18 0v6h-2V5h-4V3h6zM3 21v-6h2v4h4v2H3zm18 0h-6v-2h4v-4h2v6z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="tool-divider"></div>
+            <div class="tool-group">
+                <button class="tool-btn" data-tool="rectangle" title="Rectangle (R)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    </svg>
+                </button>
+                <button class="tool-btn" data-tool="ellipse" title="Ellipse (O)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <ellipse cx="12" cy="12" rx="10" ry="10"/>
+                    </svg>
+                </button>
+                <button class="tool-btn" data-tool="line" title="Ligne (L)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <line x1="4" y1="20" x2="20" y2="4" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </button>
+                <button class="tool-btn" data-tool="polygon" title="Polygone">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <polygon points="12,2 22,20 2,20"/>
+                    </svg>
+                </button>
+                <button class="tool-btn" data-tool="star" title="Étoile">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <polygon points="12,2 15,9 22,9 17,14 19,21 12,17 5,21 7,14 2,9 9,9"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="tool-divider"></div>
+            <div class="tool-group">
+                <button class="tool-btn" data-tool="pen" title="Plume (P)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2L2 22l10-5 10 5L12 2z"/>
+                    </svg>
+                </button>
+                <button class="tool-btn" data-tool="pencil" title="Crayon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="tool-divider"></div>
+            <div class="tool-group">
+                <button class="tool-btn" data-tool="text" title="Texte (T)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M5 4v3h5.5v12h3V7H19V4z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="tool-divider"></div>
+            <div class="tool-group">
+                <button class="tool-btn" data-tool="image" title="Image">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="tool-divider"></div>
+            <div class="tool-group">
+                <button class="tool-btn" data-tool="comment" title="Commentaire (C)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M21 6h-2V4.33C19 3.6 18.4 3 17.67 3H4.33C3.6 3 3 3.6 3 4.33v14.34c0 .47.39.84.85.83.16 0 .32-.05.45-.15l2.7-2.02h4.67v2.67c0 .74.6 1.33 1.33 1.33h6.33l2.7 2.02c.13.1.29.15.45.15.46 0 .85-.37.85-.83V6.33C22.33 5.6 21.73 5 21 5V6zM6 14l-2 1.5V5h12v9H6z"/>
+                    </svg>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Left Panel - Layers -->
+        <aside class="left-panel">
+            <div class="panel-header">
+                <div class="panel-tabs">
+                    <button class="panel-tab active" data-panel="layers">Calques</button>
+                    <button class="panel-tab" data-panel="assets">Assets</button>
+                </div>
+            </div>
+            <div class="panel-content" id="layers-panel">
+                <div class="layers-search">
+                    <input type="text" placeholder="Rechercher..." id="layer-search">
+                </div>
+                <div class="layers-tree" id="layers-tree">
+                    <div class="layer-item page">
+                        <span class="layer-icon">📄</span>
+                        <span class="layer-name">Page 1</span>
+                    </div>
+                    <!-- Layers will be added here dynamically -->
+                </div>
+            </div>
+            <div class="panel-content hidden" id="assets-panel">
+                <div class="assets-grid">
+                    <p class="empty-state">Aucun asset</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Canvas Area -->
+        <main class="canvas-area">
+            <div class="canvas-wrapper" id="canvas-wrapper">
+                <canvas id="main-canvas"></canvas>
+                <div class="selection-box" id="selection-box"></div>
+            </div>
+        </main>
+
+        <!-- Right Panel - Properties -->
+        <aside class="right-panel">
+            <div class="panel-section">
+                <div class="panel-section-header">
+                    <span>Design</span>
+                </div>
+                <div class="panel-section-content">
+                    <!-- Position & Size -->
+                    <div class="property-group">
+                        <div class="property-row">
+                            <div class="property-field">
+                                <label>X</label>
+                                <input type="number" id="prop-x" value="0">
+                            </div>
+                            <div class="property-field">
+                                <label>Y</label>
+                                <input type="number" id="prop-y" value="0">
+                            </div>
+                        </div>
+                        <div class="property-row">
+                            <div class="property-field">
+                                <label>L</label>
+                                <input type="number" id="prop-width" value="100">
+                            </div>
+                            <div class="property-field">
+                                <label>H</label>
+                                <input type="number" id="prop-height" value="100">
+                            </div>
+                            <button class="lock-btn" id="lock-ratio" title="Verrouiller les proportions">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="property-row">
+                            <div class="property-field">
+                                <label>Rotation</label>
+                                <input type="number" id="prop-rotation" value="0">
+                                <span class="unit">°</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fill Section -->
+            <div class="panel-section">
+                <div class="panel-section-header">
+                    <span>Remplissage</span>
+                    <button class="add-btn" id="add-fill">+</button>
+                </div>
+                <div class="panel-section-content" id="fill-section">
+                    <div class="color-property">
+                        <div class="color-preview" id="fill-color-preview" style="background: #5E5CE6;"></div>
+                        <input type="text" class="color-input" id="fill-color" value="#5E5CE6">
+                        <input type="number" class="opacity-input" id="fill-opacity" value="100" min="0" max="100">
+                        <span class="unit">%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stroke Section -->
+            <div class="panel-section">
+                <div class="panel-section-header">
+                    <span>Contour</span>
+                    <button class="add-btn" id="add-stroke">+</button>
+                </div>
+                <div class="panel-section-content" id="stroke-section">
+                    <div class="color-property">
+                        <div class="color-preview" id="stroke-color-preview" style="background: #000000;"></div>
+                        <input type="text" class="color-input" id="stroke-color" value="#000000">
+                        <input type="number" class="stroke-width-input" id="stroke-width" value="1" min="0">
+                        <span class="unit">px</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Effects Section -->
+            <div class="panel-section">
+                <div class="panel-section-header">
+                    <span>Effets</span>
+                    <button class="add-btn" id="add-effect">+</button>
+                </div>
+                <div class="panel-section-content" id="effects-section">
+                    <div class="effect-item">
+                        <select id="effect-type">
+                            <option value="shadow">Ombre portée</option>
+                            <option value="inner-shadow">Ombre interne</option>
+                            <option value="blur">Flou</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Corner Radius -->
+            <div class="panel-section">
+                <div class="panel-section-header">
+                    <span>Coins</span>
+                </div>
+                <div class="panel-section-content">
+                    <div class="property-row corners">
+                        <div class="property-field">
+                            <input type="number" id="corner-tl" value="0" min="0">
+                        </div>
+                        <div class="property-field">
+                            <input type="number" id="corner-tr" value="0" min="0">
+                        </div>
+                        <div class="property-field">
+                            <input type="number" id="corner-br" value="0" min="0">
+                        </div>
+                        <div class="property-field">
+                            <input type="number" id="corner-bl" value="0" min="0">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Color Picker Modal -->
+    <div class="modal hidden" id="color-picker-modal">
+        <div class="modal-content color-picker">
+            <div class="color-picker-header">
+                <span>Couleur</span>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="color-picker-body">
+                <div class="color-gradient" id="color-gradient">
+                    <div class="color-cursor" id="color-cursor"></div>
+                </div>
+                <div class="color-hue" id="color-hue">
+                    <div class="hue-cursor" id="hue-cursor"></div>
+                </div>
+                <div class="color-inputs">
+                    <div class="color-input-group">
+                        <label>HEX</label>
+                        <input type="text" id="hex-input" value="#5E5CE6">
+                    </div>
+                    <div class="color-input-row">
+                        <div class="color-input-group">
+                            <label>R</label>
+                            <input type="number" id="r-input" value="94" min="0" max="255">
+                        </div>
+                        <div class="color-input-group">
+                            <label>G</label>
+                            <input type="number" id="g-input" value="92" min="0" max="255">
+                        </div>
+                        <div class="color-input-group">
+                            <label>B</label>
+                            <input type="number" id="b-input" value="230" min="0" max="255">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="context-menu hidden" id="context-menu">
+        <div class="context-menu-item" data-action="copy">Copier</div>
+        <div class="context-menu-item" data-action="paste">Coller</div>
+        <div class="context-menu-item" data-action="duplicate">Dupliquer</div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" data-action="bring-front">Mettre au premier plan</div>
+        <div class="context-menu-item" data-action="send-back">Mettre à l'arrière-plan</div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" data-action="group">Grouper</div>
+        <div class="context-menu-item" data-action="ungroup">Dégrouper</div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item delete" data-action="delete">Supprimer</div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
