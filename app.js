@@ -358,24 +358,7 @@ function handleSelectToolDown(point, e) {
 }
 
 function handleShapeToolDown(point) {
-    // Check if clicking on an existing object - if so, switch to select and select it
-    const existingObj = getObjectAtPoint(point);
-    if (existingObj) {
-        selectTool('select');
-        state.selectedObjects = [existingObj];
-
-        // Start dragging
-        state.isDragging = true;
-        state.dragOffset = point;
-        existingObj.dragStartX = existingObj.x;
-        existingObj.dragStartY = existingObj.y;
-
-        updatePropertiesPanel();
-        updateLayersPanel();
-        render();
-        return;
-    }
-
+    // Draw on top of existing elements - don't select them
     state.isDrawing = true;
     state.startPoint = point;
 
@@ -413,29 +396,7 @@ function handleShapeToolDown(point) {
 }
 
 function handleTextToolDown(point) {
-    // Check if clicking on an existing object - if so, switch to select and select it
-    const existingObj = getObjectAtPoint(point);
-    if (existingObj) {
-        selectTool('select');
-        state.selectedObjects = [existingObj];
-
-        // If clicking on text, start editing it
-        if (existingObj.type === 'text') {
-            startTextEditing(existingObj);
-        } else {
-            // Start dragging
-            state.isDragging = true;
-            state.dragOffset = point;
-            existingObj.dragStartX = existingObj.x;
-            existingObj.dragStartY = existingObj.y;
-        }
-
-        updatePropertiesPanel();
-        updateLayersPanel();
-        render();
-        return;
-    }
-
+    // Create text at click point - don't select existing objects
     const textObj = {
         id: generateId(),
         type: 'text',
@@ -464,24 +425,7 @@ function handleTextToolDown(point) {
 }
 
 function handlePencilToolDown(point) {
-    // Check if clicking on an existing object - if so, switch to select and select it
-    const existingObj = getObjectAtPoint(point);
-    if (existingObj) {
-        selectTool('select');
-        state.selectedObjects = [existingObj];
-
-        // Start dragging
-        state.isDragging = true;
-        state.dragOffset = point;
-        existingObj.dragStartX = existingObj.x;
-        existingObj.dragStartY = existingObj.y;
-
-        updatePropertiesPanel();
-        updateLayersPanel();
-        render();
-        return;
-    }
-
+    // Draw on top of existing elements - don't select them
     state.isDrawing = true;
     state.tempObject = {
         id: generateId(),
@@ -782,20 +726,24 @@ function startTextEditing(obj) {
     state.isEditingText = true;
     state.editingTextObject = obj;
 
-    const bounds = getObjectBounds(obj);
-    const screenPos = canvasToScreen({ x: bounds.x, y: bounds.y + obj.fontSize });
+    // Position textarea at the text location
+    const screenPos = canvasToScreen({ x: obj.x, y: obj.y });
 
     const textarea = document.createElement('textarea');
     textarea.className = 'text-input-overlay';
-    textarea.value = obj.text;
+    textarea.value = obj.text === 'Texte' ? '' : obj.text; // Clear default text for editing
+    textarea.placeholder = 'Saisissez votre texte...';
     textarea.style.left = screenPos.x + 'px';
     textarea.style.top = screenPos.y + 'px';
     textarea.style.fontSize = (obj.fontSize * state.zoom) + 'px';
     textarea.style.fontFamily = obj.fontFamily;
     textarea.style.color = '#ffffff';
     textarea.style.backgroundColor = 'rgba(30, 30, 30, 0.95)';
-    textarea.style.width = Math.max(bounds.width * state.zoom + 50, 150) + 'px';
-    textarea.style.height = Math.max(bounds.height * state.zoom + 30, 40) + 'px';
+    textarea.style.minWidth = '200px';
+    textarea.style.minHeight = '40px';
+    textarea.style.width = 'auto';
+    textarea.style.height = 'auto';
+    textarea.style.zIndex = '1000';
 
     textarea.addEventListener('blur', () => {
         finishTextEditing(textarea);
@@ -805,22 +753,46 @@ function startTextEditing(obj) {
         if (e.key === 'Escape') {
             finishTextEditing(textarea);
         }
+        // Allow Enter for multiline text without blur
+        e.stopPropagation();
+    });
+
+    // Prevent mouse events from propagating to canvas
+    textarea.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
     });
 
     state.canvasWrapper.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
+
+    // Focus and select after a short delay to ensure the element is rendered
+    setTimeout(() => {
+        textarea.focus();
+        if (textarea.value) {
+            textarea.select();
+        }
+    }, 10);
 }
 
 function finishTextEditing(textarea) {
     if (state.editingTextObject) {
-        state.editingTextObject.text = textarea.value;
-        saveHistory();
+        const newText = textarea.value.trim();
+        if (newText) {
+            state.editingTextObject.text = newText;
+            saveHistory();
+        } else {
+            // If no text entered, remove the object
+            const index = state.objects.indexOf(state.editingTextObject);
+            if (index > -1) {
+                state.objects.splice(index, 1);
+                state.selectedObjects = [];
+            }
+        }
     }
 
     state.isEditingText = false;
     state.editingTextObject = null;
     textarea.remove();
+    updateLayersPanel();
     render();
 }
 
@@ -1219,6 +1191,11 @@ function initToolbar() {
 
     toolButtons.forEach(btn => {
         btn.addEventListener('click', () => {
+            // Don't select disabled tools
+            if (btn.classList.contains('disabled')) {
+                showToast('Cette fonctionnalité sera bientôt disponible', 'warning');
+                return;
+            }
             const tool = btn.dataset.tool;
             selectTool(tool);
         });
@@ -1606,10 +1583,12 @@ let activeGradientStop = 1;
 
 function initColorPicker() {
     const modal = document.getElementById('color-picker-modal');
+    const modalContent = modal.querySelector('.color-picker');
     const gradient = document.getElementById('color-gradient');
     const hue = document.getElementById('color-hue');
     const alpha = document.getElementById('color-alpha');
     const closeBtn = modal.querySelector('.close-modal');
+    const header = modal.querySelector('.color-picker-header');
 
     closeBtn.addEventListener('click', () => {
         modal.classList.add('hidden');
@@ -1619,6 +1598,32 @@ function initColorPicker() {
         if (e.target === modal) {
             modal.classList.add('hidden');
         }
+    });
+
+    // Make modal draggable
+    let isDraggingModal = false;
+    let modalDragOffset = { x: 0, y: 0 };
+
+    header.addEventListener('mousedown', (e) => {
+        if (e.target === closeBtn || e.target.closest('.close-modal')) return;
+        isDraggingModal = true;
+        const rect = modalContent.getBoundingClientRect();
+        modalDragOffset.x = e.clientX - rect.left;
+        modalDragOffset.y = e.clientY - rect.top;
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDraggingModal) return;
+        const x = e.clientX - modalDragOffset.x;
+        const y = e.clientY - modalDragOffset.y;
+        modalContent.style.left = x + 'px';
+        modalContent.style.top = y + 'px';
+        modalContent.style.right = 'auto';
+    });
+
+    document.addEventListener('mouseup', () => {
+        isDraggingModal = false;
     });
 
     // Color/Gradient tab switching
