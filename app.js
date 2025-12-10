@@ -144,6 +144,7 @@ function handleMouseDown(e) {
             case 'line':
             case 'polygon':
             case 'star':
+            case 'frame':
                 handleShapeToolDown(point);
                 break;
             case 'text':
@@ -153,6 +154,8 @@ function handleMouseDown(e) {
                 handlePencilToolDown(point);
                 break;
             default:
+                // Default to select behavior
+                handleSelectToolDown(point, e);
                 break;
         }
     }
@@ -355,6 +358,24 @@ function handleSelectToolDown(point, e) {
 }
 
 function handleShapeToolDown(point) {
+    // Check if clicking on an existing object - if so, switch to select and select it
+    const existingObj = getObjectAtPoint(point);
+    if (existingObj) {
+        selectTool('select');
+        state.selectedObjects = [existingObj];
+
+        // Start dragging
+        state.isDragging = true;
+        state.dragOffset = point;
+        existingObj.dragStartX = existingObj.x;
+        existingObj.dragStartY = existingObj.y;
+
+        updatePropertiesPanel();
+        updateLayersPanel();
+        render();
+        return;
+    }
+
     state.isDrawing = true;
     state.startPoint = point;
 
@@ -367,9 +388,9 @@ function handleShapeToolDown(point) {
         y: point.y,
         width: 0,
         height: 0,
-        fill: state.defaultFill,
-        stroke: state.defaultStroke,
-        strokeWidth: state.defaultStrokeWidth,
+        fill: type === 'frame' ? '#ffffff' : state.defaultFill,
+        stroke: type === 'frame' ? '#cccccc' : state.defaultStroke,
+        strokeWidth: type === 'frame' ? 1 : state.defaultStrokeWidth,
         opacity: state.defaultOpacity,
         rotation: 0,
         cornerRadius: state.defaultCornerRadius,
@@ -392,6 +413,29 @@ function handleShapeToolDown(point) {
 }
 
 function handleTextToolDown(point) {
+    // Check if clicking on an existing object - if so, switch to select and select it
+    const existingObj = getObjectAtPoint(point);
+    if (existingObj) {
+        selectTool('select');
+        state.selectedObjects = [existingObj];
+
+        // If clicking on text, start editing it
+        if (existingObj.type === 'text') {
+            startTextEditing(existingObj);
+        } else {
+            // Start dragging
+            state.isDragging = true;
+            state.dragOffset = point;
+            existingObj.dragStartX = existingObj.x;
+            existingObj.dragStartY = existingObj.y;
+        }
+
+        updatePropertiesPanel();
+        updateLayersPanel();
+        render();
+        return;
+    }
+
     const textObj = {
         id: generateId(),
         type: 'text',
@@ -420,6 +464,24 @@ function handleTextToolDown(point) {
 }
 
 function handlePencilToolDown(point) {
+    // Check if clicking on an existing object - if so, switch to select and select it
+    const existingObj = getObjectAtPoint(point);
+    if (existingObj) {
+        selectTool('select');
+        state.selectedObjects = [existingObj];
+
+        // Start dragging
+        state.isDragging = true;
+        state.dragOffset = point;
+        existingObj.dragStartX = existingObj.x;
+        existingObj.dragStartY = existingObj.y;
+
+        updatePropertiesPanel();
+        updateLayersPanel();
+        render();
+        return;
+    }
+
     state.isDrawing = true;
     state.tempObject = {
         id: generateId(),
@@ -467,6 +529,14 @@ function finalizeObject() {
     if (state.tempObject) {
         const obj = state.tempObject;
 
+        // Check if the object should be parented to a frame
+        if (obj.type !== 'frame') {
+            const parentFrame = findParentFrame(obj);
+            if (parentFrame) {
+                obj.parentId = parentFrame.id;
+            }
+        }
+
         // Only add if it has dimensions
         if (obj.type === 'line') {
             const dx = obj.x2 - obj.x;
@@ -505,6 +575,32 @@ function finalizeObject() {
 
     state.tempObject = null;
     state.isDrawing = false;
+}
+
+// Find the frame that contains an object
+function findParentFrame(obj) {
+    const frames = state.objects.filter(o => o.type === 'frame');
+
+    // Check if object's center is inside a frame
+    const centerX = obj.x + (obj.width || 0) / 2;
+    const centerY = obj.y + (obj.height || 0) / 2;
+
+    // Find the smallest frame containing the object (for nested frames support)
+    let bestFrame = null;
+    let smallestArea = Infinity;
+
+    for (const frame of frames) {
+        if (centerX >= frame.x && centerX <= frame.x + frame.width &&
+            centerY >= frame.y && centerY <= frame.y + frame.height) {
+            const area = frame.width * frame.height;
+            if (area < smallestArea) {
+                smallestArea = area;
+                bestFrame = frame;
+            }
+        }
+    }
+
+    return bestFrame;
 }
 
 // ========================================
@@ -1341,42 +1437,103 @@ function updateLayersPanel() {
     const pageItem = tree.querySelector('.layer-item.page');
 
     // Remove all layer items except the page
-    tree.querySelectorAll('.layer-item:not(.page)').forEach(el => el.remove());
+    tree.querySelectorAll('.layer-item:not(.page), .layer-children').forEach(el => el.remove());
 
-    // Add layer items for each object (in reverse order)
-    [...state.objects].reverse().forEach(obj => {
-        const item = document.createElement('div');
-        item.className = 'layer-item';
-        if (state.selectedObjects.includes(obj)) {
-            item.classList.add('selected');
+    // Separate frames and other objects
+    const frames = state.objects.filter(obj => obj.type === 'frame');
+    const topLevelObjects = state.objects.filter(obj => obj.type !== 'frame' && !obj.parentId);
+
+    // Render frames first (they contain children)
+    [...frames].reverse().forEach(frame => {
+        const frameContainer = document.createElement('div');
+        frameContainer.className = 'layer-frame-container';
+
+        const item = createLayerItem(frame, 0, true);
+        frameContainer.appendChild(item);
+
+        // Find children of this frame
+        const children = state.objects.filter(obj => obj.parentId === frame.id);
+        if (children.length > 0) {
+            const childrenContainer = document.createElement('div');
+            childrenContainer.className = 'layer-children';
+            childrenContainer.dataset.frameId = frame.id;
+
+            [...children].reverse().forEach(child => {
+                const childItem = createLayerItem(child, 1, false);
+                childrenContainer.appendChild(childItem);
+            });
+
+            frameContainer.appendChild(childrenContainer);
         }
-        item.dataset.id = obj.id;
 
-        const icon = getIconForType(obj.type);
-        item.innerHTML = `
-            <span class="layer-icon">${icon}</span>
-            <span class="layer-name">${obj.name}</span>
-            <span class="layer-visibility">👁</span>
-        `;
+        tree.appendChild(frameContainer);
+    });
 
-        item.addEventListener('click', (e) => {
-            if (e.shiftKey) {
-                const index = state.selectedObjects.indexOf(obj);
-                if (index > -1) {
-                    state.selectedObjects.splice(index, 1);
-                } else {
-                    state.selectedObjects.push(obj);
-                }
-            } else {
-                state.selectedObjects = [obj];
-            }
-            updatePropertiesPanel();
-            updateLayersPanel();
-            render();
-        });
-
+    // Render top-level objects (not in frames)
+    [...topLevelObjects].reverse().forEach(obj => {
+        const item = createLayerItem(obj, 0, false);
         tree.appendChild(item);
     });
+}
+
+function createLayerItem(obj, indent, isFrame) {
+    const item = document.createElement('div');
+    item.className = 'layer-item';
+    if (indent > 0) {
+        item.classList.add('indent-' + indent);
+    }
+    if (isFrame) {
+        item.classList.add('frame-item');
+    }
+    if (state.selectedObjects.includes(obj)) {
+        item.classList.add('selected');
+    }
+    item.dataset.id = obj.id;
+
+    const icon = getIconForType(obj.type);
+    const hasChildren = isFrame && state.objects.some(o => o.parentId === obj.id);
+
+    item.innerHTML = `
+        ${hasChildren ? '<span class="layer-toggle">▼</span>' : '<span class="layer-toggle-placeholder" style="width:16px"></span>'}
+        <span class="layer-icon">${icon}</span>
+        <span class="layer-name">${obj.name}</span>
+        <span class="layer-visibility">👁</span>
+    `;
+
+    // Toggle collapse/expand for frames
+    const toggle = item.querySelector('.layer-toggle');
+    if (toggle) {
+        toggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const container = item.parentElement;
+            const children = container.querySelector('.layer-children');
+            if (children) {
+                toggle.classList.toggle('collapsed');
+                children.classList.toggle('collapsed');
+            }
+        });
+    }
+
+    // Selection handler
+    item.addEventListener('click', (e) => {
+        if (e.target.classList.contains('layer-toggle')) return;
+
+        if (e.shiftKey) {
+            const index = state.selectedObjects.indexOf(obj);
+            if (index > -1) {
+                state.selectedObjects.splice(index, 1);
+            } else {
+                state.selectedObjects.push(obj);
+            }
+        } else {
+            state.selectedObjects = [obj];
+        }
+        updatePropertiesPanel();
+        updateLayersPanel();
+        render();
+    });
+
+    return item;
 }
 
 function getIconForType(type) {
@@ -1437,11 +1594,21 @@ function handleContextMenuAction(action) {
 // ========================================
 
 let currentColorTarget = null;
+let currentHue = 0;
+let currentSaturation = 0.74;
+let currentBrightness = 0.63;
+let currentAlpha = 100;
+let gradientStops = [
+    { position: 0, color: '#5e5ce6' },
+    { position: 100, color: '#00d4ff' }
+];
+let activeGradientStop = 1;
 
 function initColorPicker() {
     const modal = document.getElementById('color-picker-modal');
     const gradient = document.getElementById('color-gradient');
     const hue = document.getElementById('color-hue');
+    const alpha = document.getElementById('color-alpha');
     const closeBtn = modal.querySelector('.close-modal');
 
     closeBtn.addEventListener('click', () => {
@@ -1452,6 +1619,30 @@ function initColorPicker() {
         if (e.target === modal) {
             modal.classList.add('hidden');
         }
+    });
+
+    // Color/Gradient tab switching
+    document.querySelectorAll('.color-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.color-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+
+            const tabName = tab.dataset.tab;
+            document.querySelectorAll('.color-tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById(tabName + '-tab').classList.add('active');
+        });
+    });
+
+    // Color mode tabs (HEX, RGB, HSL)
+    document.querySelectorAll('.mode-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+
+            const mode = tab.dataset.mode;
+            document.querySelectorAll('.color-mode-content').forEach(c => c.classList.remove('active'));
+            document.getElementById(mode + '-mode').classList.add('active');
+        });
     });
 
     // Gradient interaction
@@ -1484,15 +1675,126 @@ function initColorPicker() {
         isDraggingHue = false;
     });
 
+    // Alpha interaction
+    let isDraggingAlpha = false;
+    if (alpha) {
+        alpha.addEventListener('mousedown', (e) => {
+            isDraggingAlpha = true;
+            updateAlphaColor(e);
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isDraggingAlpha) updateAlphaColor(e);
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDraggingAlpha = false;
+        });
+    }
+
     // Input changes
-    document.getElementById('hex-input').addEventListener('change', (e) => {
-        applyColorFromPicker(e.target.value);
+    document.getElementById('hex-input')?.addEventListener('change', (e) => {
+        const color = e.target.value;
+        if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
+            applyColorFromPicker(color);
+            updateColorFromHex(color);
+        }
+    });
+
+    // RGB inputs
+    ['r-input', 'g-input', 'b-input'].forEach(id => {
+        document.getElementById(id)?.addEventListener('change', () => {
+            const r = parseInt(document.getElementById('r-input').value) || 0;
+            const g = parseInt(document.getElementById('g-input').value) || 0;
+            const b = parseInt(document.getElementById('b-input').value) || 0;
+            const hex = rgbToHex(r, g, b);
+            applyColorFromPicker(hex);
+            updateColorFromHex(hex);
+        });
+    });
+
+    // HSL inputs
+    ['h-input', 's-input', 'l-input'].forEach(id => {
+        document.getElementById(id)?.addEventListener('change', () => {
+            const h = parseInt(document.getElementById('h-input').value) || 0;
+            const s = parseInt(document.getElementById('s-input').value) || 0;
+            const l = parseInt(document.getElementById('l-input').value) || 0;
+            const hex = hslToHex(h, s, l);
+            applyColorFromPicker(hex);
+            updateColorFromHex(hex);
+        });
+    });
+
+    // Alpha input
+    document.getElementById('alpha-input')?.addEventListener('change', (e) => {
+        currentAlpha = parseInt(e.target.value) || 100;
+        updateAlphaCursor();
+        updateColorPreview();
+    });
+
+    // Gradient controls
+    document.getElementById('gradient-type')?.addEventListener('change', updateGradientPreview);
+    document.getElementById('gradient-angle')?.addEventListener('change', updateGradientPreview);
+    document.getElementById('gradient-stop-color')?.addEventListener('input', (e) => {
+        if (gradientStops[activeGradientStop]) {
+            gradientStops[activeGradientStop].color = e.target.value;
+            updateGradientPreview();
+        }
+    });
+
+    // Gradient stop clicks
+    document.querySelectorAll('.gradient-stop').forEach((stop, index) => {
+        stop.addEventListener('click', () => {
+            document.querySelectorAll('.gradient-stop').forEach(s => s.classList.remove('active'));
+            stop.classList.add('active');
+            activeGradientStop = index;
+            document.getElementById('gradient-stop-color').value = gradientStops[index].color;
+        });
     });
 }
 
 function openColorPicker(target) {
     currentColorTarget = target;
     document.getElementById('color-picker-modal').classList.remove('hidden');
+
+    // Set current color
+    let currentColor;
+    if (target === 'fill') {
+        currentColor = document.getElementById('fill-color').value;
+    } else {
+        currentColor = document.getElementById('stroke-color').value;
+    }
+
+    updateColorFromHex(currentColor);
+}
+
+function updateColorFromHex(hex) {
+    // Update hex input
+    document.getElementById('hex-input').value = hex;
+
+    // Update RGB inputs
+    const rgb = hexToRgb(hex);
+    if (rgb) {
+        document.getElementById('r-input').value = rgb.r;
+        document.getElementById('g-input').value = rgb.g;
+        document.getElementById('b-input').value = rgb.b;
+    }
+
+    // Update HSL inputs
+    const hsl = hexToHsl(hex);
+    if (hsl) {
+        document.getElementById('h-input').value = Math.round(hsl.h);
+        document.getElementById('s-input').value = Math.round(hsl.s);
+        document.getElementById('l-input').value = Math.round(hsl.l);
+        currentHue = hsl.h;
+    }
+
+    // Update gradient background
+    const gradient = document.getElementById('color-gradient');
+    gradient.style.background = `linear-gradient(to right, #fff, hsl(${currentHue}, 100%, 50%))`;
+
+    // Update color preview
+    updateColorPreview();
 }
 
 function updateGradientColor(e) {
@@ -1506,15 +1808,13 @@ function updateGradientColor(e) {
     cursor.style.left = x + 'px';
     cursor.style.top = y + 'px';
 
-    // Calculate color (simplified)
-    const saturation = x / rect.width;
-    const brightness = 1 - y / rect.height;
-    const color = hsbToHex(currentHue || 0, saturation, brightness);
+    currentSaturation = x / rect.width;
+    currentBrightness = 1 - y / rect.height;
+    const color = hsbToHex(currentHue, currentSaturation, currentBrightness);
 
     applyColorFromPicker(color);
+    updateAllColorInputs(color);
 }
-
-let currentHue = 0;
 
 function updateHueColor(e) {
     const hueBar = document.getElementById('color-hue');
@@ -1529,11 +1829,89 @@ function updateHueColor(e) {
     // Update gradient background
     const gradient = document.getElementById('color-gradient');
     gradient.style.background = `linear-gradient(to right, #fff, hsl(${currentHue}, 100%, 50%))`;
+
+    const color = hsbToHex(currentHue, currentSaturation, currentBrightness);
+    applyColorFromPicker(color);
+    updateAllColorInputs(color);
+}
+
+function updateAlphaColor(e) {
+    const alphaBar = document.getElementById('color-alpha');
+    const rect = alphaBar.getBoundingClientRect();
+    const cursor = document.getElementById('alpha-cursor');
+
+    let x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    cursor.style.left = x + 'px';
+
+    currentAlpha = Math.round((x / rect.width) * 100);
+    document.getElementById('alpha-input').value = currentAlpha;
+    updateColorPreview();
+}
+
+function updateAlphaCursor() {
+    const cursor = document.getElementById('alpha-cursor');
+    const alphaBar = document.getElementById('color-alpha');
+    if (cursor && alphaBar) {
+        const width = alphaBar.offsetWidth;
+        cursor.style.left = (currentAlpha / 100 * width) + 'px';
+    }
+}
+
+function updateColorPreview() {
+    const preview = document.getElementById('color-preview-current');
+    const color = hsbToHex(currentHue, currentSaturation, currentBrightness);
+    if (preview) {
+        preview.style.backgroundColor = color;
+        preview.style.opacity = currentAlpha / 100;
+    }
+
+    // Update alpha bar color
+    const alphaBar = document.getElementById('color-alpha');
+    if (alphaBar) {
+        alphaBar.style.setProperty('--current-color', color);
+    }
+}
+
+function updateAllColorInputs(hex) {
+    document.getElementById('hex-input').value = hex;
+
+    const rgb = hexToRgb(hex);
+    if (rgb) {
+        document.getElementById('r-input').value = rgb.r;
+        document.getElementById('g-input').value = rgb.g;
+        document.getElementById('b-input').value = rgb.b;
+    }
+
+    const hsl = hexToHsl(hex);
+    if (hsl) {
+        document.getElementById('h-input').value = Math.round(hsl.h);
+        document.getElementById('s-input').value = Math.round(hsl.s);
+        document.getElementById('l-input').value = Math.round(hsl.l);
+    }
+
+    updateColorPreview();
+}
+
+function updateGradientPreview() {
+    const type = document.getElementById('gradient-type').value;
+    const angle = document.getElementById('gradient-angle').value;
+    const preview = document.getElementById('gradient-preview');
+    const bar = document.getElementById('gradient-bar');
+
+    const stopsStr = gradientStops.map(s => `${s.color} ${s.position}%`).join(', ');
+
+    let gradientCSS;
+    if (type === 'linear') {
+        gradientCSS = `linear-gradient(${angle}deg, ${stopsStr})`;
+    } else {
+        gradientCSS = `radial-gradient(circle, ${stopsStr})`;
+    }
+
+    preview.style.background = gradientCSS;
+    bar.style.background = `linear-gradient(90deg, ${stopsStr})`;
 }
 
 function applyColorFromPicker(color) {
-    document.getElementById('hex-input').value = color;
-
     if (currentColorTarget === 'fill') {
         document.getElementById('fill-color').value = color;
         document.getElementById('fill-color-preview').style.background = color;
@@ -1555,6 +1933,7 @@ function applyColorFromPicker(color) {
     }
 }
 
+// Color conversion functions
 function hsbToHex(h, s, b) {
     const c = b * s;
     const x = c * (1 - Math.abs((h / 60) % 2 - 1));
@@ -1573,6 +1952,72 @@ function hsbToHex(h, s, b) {
     bl = Math.round((bl + m) * 255);
 
     return '#' + [r, g, bl].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+
+function hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+    } : null;
+}
+
+function rgbToHex(r, g, b) {
+    return '#' + [r, g, b].map(v => {
+        const hex = Math.max(0, Math.min(255, v)).toString(16);
+        return hex.padStart(2, '0');
+    }).join('');
+}
+
+function hexToHsl(hex) {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return null;
+
+    let r = rgb.r / 255;
+    let g = rgb.g / 255;
+    let b = rgb.b / 255;
+
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+
+    if (max === min) {
+        h = s = 0;
+    } else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+            case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+            case g: h = ((b - r) / d + 2) / 6; break;
+            case b: h = ((r - g) / d + 4) / 6; break;
+        }
+    }
+
+    return { h: h * 360, s: s * 100, l: l * 100 };
+}
+
+function hslToHex(h, s, l) {
+    s /= 100;
+    l /= 100;
+
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = l - c / 2;
+
+    let r, g, b;
+    if (h < 60) { r = c; g = x; b = 0; }
+    else if (h < 120) { r = x; g = c; b = 0; }
+    else if (h < 180) { r = 0; g = c; b = x; }
+    else if (h < 240) { r = 0; g = x; b = c; }
+    else if (h < 300) { r = x; g = 0; b = c; }
+    else { r = c; g = 0; b = x; }
+
+    r = Math.round((r + m) * 255);
+    g = Math.round((g + m) * 255);
+    b = Math.round((b + m) * 255);
+
+    return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
 }
 
 // ========================================
@@ -1657,6 +2102,14 @@ function initKeyboardShortcuts() {
                     break;
                 case '0':
                     resetZoom();
+                    e.preventDefault();
+                    break;
+                case 's':
+                    document.getElementById('save-file')?.click();
+                    e.preventDefault();
+                    break;
+                case 'o':
+                    document.getElementById('open-file')?.click();
                     e.preventDefault();
                     break;
             }
@@ -1970,11 +2423,133 @@ document.getElementById('new-file')?.addEventListener('click', () => {
     }
 });
 
-document.getElementById('save-file')?.addEventListener('click', () => {
+// Open file handler
+document.getElementById('open-file')?.addEventListener('click', async () => {
+    // Try to use the native File System Access API
+    if ('showOpenFilePicker' in window) {
+        try {
+            const [handle] = await window.showOpenFilePicker({
+                types: [{
+                    description: 'Figma Clone File',
+                    accept: { 'application/json': ['.figclone', '.json'] }
+                }],
+                multiple: false
+            });
+
+            const file = await handle.getFile();
+            const contents = await file.text();
+            const data = JSON.parse(contents);
+
+            if (data.objects) {
+                state.objects = data.objects;
+                state.selectedObjects = [];
+                state.history = [];
+                state.historyIndex = -1;
+                saveHistory();
+
+                // Update file name
+                const fileName = file.name.replace(/\.(figclone|json)$/, '');
+                document.getElementById('file-name').value = fileName;
+
+                updateLayersPanel();
+                updatePropertiesPanel();
+                render();
+                showToast('Fichier ouvert!', 'success');
+            } else {
+                showToast('Format de fichier invalide', 'error');
+            }
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.error('Error opening file:', err);
+                showToast('Erreur lors de l\'ouverture', 'error');
+            }
+        }
+    } else {
+        // Fallback for browsers without File System Access API
+        fallbackOpenFile();
+    }
+});
+
+function fallbackOpenFile() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.figclone,.json';
+
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        try {
+            const contents = await file.text();
+            const data = JSON.parse(contents);
+
+            if (data.objects) {
+                state.objects = data.objects;
+                state.selectedObjects = [];
+                state.history = [];
+                state.historyIndex = -1;
+                saveHistory();
+
+                const fileName = file.name.replace(/\.(figclone|json)$/, '');
+                document.getElementById('file-name').value = fileName;
+
+                updateLayersPanel();
+                updatePropertiesPanel();
+                render();
+                showToast('Fichier ouvert!', 'success');
+            } else {
+                showToast('Format de fichier invalide', 'error');
+            }
+        } catch (err) {
+            console.error('Error opening file:', err);
+            showToast('Erreur lors de l\'ouverture', 'error');
+        }
+    };
+
+    input.click();
+}
+
+document.getElementById('save-file')?.addEventListener('click', async () => {
     const data = JSON.stringify({
         objects: state.objects,
         version: '1.0'
-    });
+    }, null, 2);
+
+    // Try to use the native File System Access API
+    if ('showSaveFilePicker' in window) {
+        try {
+            const handle = await window.showSaveFilePicker({
+                suggestedName: document.getElementById('file-name').value + '.figclone',
+                types: [{
+                    description: 'Figma Clone File',
+                    accept: { 'application/json': ['.figclone'] }
+                }]
+            });
+
+            const writable = await handle.createWritable();
+            await writable.write(data);
+            await writable.close();
+
+            // Update file name from the selected file
+            const fileName = handle.name.replace('.figclone', '');
+            document.getElementById('file-name').value = fileName;
+
+            autoSaveToRecent();
+            showToast('Fichier sauvegardé!', 'success');
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.error('Error saving file:', err);
+                // Fallback to download method
+                fallbackSaveFile(data);
+            }
+        }
+    } else {
+        // Fallback for browsers without File System Access API
+        fallbackSaveFile(data);
+    }
+});
+
+function fallbackSaveFile(data) {
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1982,8 +2557,9 @@ document.getElementById('save-file')?.addEventListener('click', () => {
     a.download = document.getElementById('file-name').value + '.figclone';
     a.click();
     URL.revokeObjectURL(url);
+    autoSaveToRecent();
     showToast('Fichier sauvegardé!', 'success');
-});
+}
 
 document.getElementById('export-file')?.addEventListener('click', () => {
     const tempCanvas = document.createElement('canvas');
@@ -2153,6 +2729,9 @@ function createFrame(width, height, name) {
     state.objects.push(frame);
     state.selectedObjects = [frame];
 
+    // Switch back to select tool
+    selectTool('select');
+
     saveHistory();
     updateLayersPanel();
     updatePropertiesPanel();
@@ -2182,3 +2761,283 @@ function drawFrameObject(ctx, obj) {
 
 // Initialize history
 saveHistory();
+
+// ========================================
+// RESIZABLE PANELS
+// ========================================
+
+function initResizablePanels() {
+    const leftPanel = document.getElementById('left-panel');
+    const rightPanel = document.getElementById('right-panel');
+    const leftHandle = document.getElementById('left-resize-handle');
+    const rightHandle = document.getElementById('right-resize-handle');
+
+    let isResizing = false;
+    let currentPanel = null;
+    let startX = 0;
+    let startWidth = 0;
+
+    function startResize(e, panel, handle) {
+        isResizing = true;
+        currentPanel = panel;
+        startX = e.clientX;
+        startWidth = panel.offsetWidth;
+        handle.classList.add('active');
+        document.body.classList.add('resizing-panels');
+        e.preventDefault();
+    }
+
+    function doResize(e) {
+        if (!isResizing) return;
+
+        const dx = e.clientX - startX;
+        let newWidth;
+
+        if (currentPanel === leftPanel) {
+            newWidth = startWidth + dx;
+        } else {
+            newWidth = startWidth - dx;
+        }
+
+        // Clamp width between min and max
+        newWidth = Math.max(180, Math.min(400, newWidth));
+        currentPanel.style.width = newWidth + 'px';
+    }
+
+    function stopResize() {
+        if (!isResizing) return;
+        isResizing = false;
+        currentPanel = null;
+        leftHandle.classList.remove('active');
+        rightHandle.classList.remove('active');
+        document.body.classList.remove('resizing-panels');
+
+        // Trigger canvas resize
+        resizeCanvas();
+    }
+
+    if (leftHandle) {
+        leftHandle.addEventListener('mousedown', (e) => startResize(e, leftPanel, leftHandle));
+    }
+
+    if (rightHandle) {
+        rightHandle.addEventListener('mousedown', (e) => startResize(e, rightPanel, rightHandle));
+    }
+
+    document.addEventListener('mousemove', doResize);
+    document.addEventListener('mouseup', stopResize);
+}
+
+// Initialize resizable panels when DOM is ready
+document.addEventListener('DOMContentLoaded', initResizablePanels);
+
+// ========================================
+// HOME MODAL & RECENT PROJECTS
+// ========================================
+
+const RECENT_PROJECTS_KEY = 'figclone_recent_projects';
+
+function initHomeModal() {
+    const homeModal = document.getElementById('home-modal');
+    const closeBtn = document.getElementById('close-home');
+
+    // Close button
+    closeBtn?.addEventListener('click', () => {
+        homeModal.classList.add('hidden');
+    });
+
+    // Click outside to close
+    homeModal?.addEventListener('click', (e) => {
+        if (e.target === homeModal) {
+            homeModal.classList.add('hidden');
+        }
+    });
+
+    // New blank project
+    document.getElementById('new-blank-project')?.addEventListener('click', () => {
+        startNewProject();
+        homeModal.classList.add('hidden');
+    });
+
+    // New project with frame
+    ['new-desktop-project', 'new-tablet-project', 'new-mobile-project'].forEach(id => {
+        document.getElementById(id)?.addEventListener('click', (e) => {
+            const btn = e.currentTarget;
+            const width = parseInt(btn.dataset.width);
+            const height = parseInt(btn.dataset.height);
+            const name = btn.querySelector('span').textContent;
+
+            startNewProject();
+            createFrame(width, height, name);
+            homeModal.classList.add('hidden');
+        });
+    });
+
+    // Load recent projects
+    loadRecentProjects();
+
+    // Show home modal on startup (only if no objects)
+    if (state.objects.length === 0) {
+        homeModal.classList.remove('hidden');
+    }
+}
+
+function startNewProject() {
+    state.objects = [];
+    state.selectedObjects = [];
+    state.history = [];
+    state.historyIndex = -1;
+    state.layerCounter = 0;
+    document.getElementById('file-name').value = 'Sans titre';
+    saveHistory();
+    updateLayersPanel();
+    updatePropertiesPanel();
+    render();
+}
+
+function loadRecentProjects() {
+    const container = document.getElementById('recent-projects');
+    if (!container) return;
+
+    const recentProjects = getRecentProjects();
+
+    if (recentProjects.length === 0) {
+        container.innerHTML = `
+            <div class="empty-recent">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" opacity="0.3">
+                    <path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/>
+                </svg>
+                <p>Aucun fichier récent</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = '';
+    recentProjects.forEach(project => {
+        const item = document.createElement('div');
+        item.className = 'recent-project-item';
+        item.innerHTML = `
+            <div class="recent-project-thumbnail"></div>
+            <div class="recent-project-info">
+                <div class="recent-project-name">${project.name}</div>
+                <div class="recent-project-date">${formatDate(project.date)}</div>
+            </div>
+            <button class="recent-project-delete" title="Supprimer">✕</button>
+        `;
+
+        // Open project
+        item.addEventListener('click', (e) => {
+            if (e.target.classList.contains('recent-project-delete')) return;
+            loadProjectFromRecent(project);
+            document.getElementById('home-modal').classList.add('hidden');
+        });
+
+        // Delete project
+        item.querySelector('.recent-project-delete').addEventListener('click', (e) => {
+            e.stopPropagation();
+            removeFromRecentProjects(project.id);
+            loadRecentProjects();
+        });
+
+        container.appendChild(item);
+    });
+}
+
+function getRecentProjects() {
+    try {
+        const data = localStorage.getItem(RECENT_PROJECTS_KEY);
+        return data ? JSON.parse(data) : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveToRecentProjects(name, objects) {
+    const recentProjects = getRecentProjects();
+    const project = {
+        id: Date.now().toString(),
+        name: name,
+        date: new Date().toISOString(),
+        data: JSON.stringify({ objects: objects, version: '1.0' })
+    };
+
+    // Remove existing project with same name
+    const existingIndex = recentProjects.findIndex(p => p.name === name);
+    if (existingIndex > -1) {
+        recentProjects.splice(existingIndex, 1);
+    }
+
+    // Add to beginning
+    recentProjects.unshift(project);
+
+    // Keep only last 10 projects
+    const trimmed = recentProjects.slice(0, 10);
+
+    try {
+        localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(trimmed));
+    } catch (e) {
+        console.error('Error saving to localStorage:', e);
+    }
+}
+
+function removeFromRecentProjects(id) {
+    const recentProjects = getRecentProjects();
+    const filtered = recentProjects.filter(p => p.id !== id);
+    localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(filtered));
+}
+
+function loadProjectFromRecent(project) {
+    try {
+        const data = JSON.parse(project.data);
+        if (data.objects) {
+            state.objects = data.objects;
+            state.selectedObjects = [];
+            state.history = [];
+            state.historyIndex = -1;
+            saveHistory();
+
+            document.getElementById('file-name').value = project.name;
+
+            updateLayersPanel();
+            updatePropertiesPanel();
+            render();
+            showToast('Fichier ouvert!', 'success');
+        }
+    } catch (e) {
+        console.error('Error loading project:', e);
+        showToast('Erreur lors du chargement', 'error');
+    }
+}
+
+function formatDate(isoString) {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diff = now - date;
+
+    if (diff < 60000) return 'À l\'instant';
+    if (diff < 3600000) return `Il y a ${Math.floor(diff / 60000)} min`;
+    if (diff < 86400000) return `Il y a ${Math.floor(diff / 3600000)} h`;
+    if (diff < 604800000) return `Il y a ${Math.floor(diff / 86400000)} j`;
+
+    return date.toLocaleDateString('fr-FR');
+}
+
+// Auto-save to recent projects on save
+function autoSaveToRecent() {
+    if (state.objects.length > 0) {
+        const name = document.getElementById('file-name').value || 'Sans titre';
+        saveToRecentProjects(name, state.objects);
+    }
+}
+
+// Initialize home modal when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    initHomeModal();
+});
+
+// Show home modal when clicking logo
+document.querySelector('.logo')?.addEventListener('click', () => {
+    loadRecentProjects();
+    document.getElementById('home-modal').classList.remove('hidden');
+});
