@@ -53,6 +53,12 @@ const state = {
     isEditingText: false,
     editingTextObject: null,
 
+    // Pen tool
+    penPath: null,
+
+    // Presentation mode
+    isPresenting: false,
+
     // Default styles
     defaultFill: '#5E5CE6',
     defaultStroke: '#000000',
@@ -152,6 +158,15 @@ function handleMouseDown(e) {
                 break;
             case 'pencil':
                 handlePencilToolDown(point);
+                break;
+            case 'pen':
+                handlePenToolDown(point);
+                break;
+            case 'image':
+                handleImageToolDown(point);
+                break;
+            case 'comment':
+                handleCommentToolDown(point);
                 break;
             default:
                 // Default to select behavior
@@ -437,6 +452,176 @@ function handlePencilToolDown(point) {
         opacity: state.defaultOpacity,
         name: getObjectName('path')
     };
+}
+
+// Pen tool - for creating vector paths with bezier curves
+function handlePenToolDown(point) {
+    // If we're already drawing a pen path, add a point
+    if (state.penPath && state.penPath.points.length > 0) {
+        state.penPath.points.push({ x: point.x, y: point.y, type: 'corner' });
+        render();
+        drawPenPreview();
+    } else {
+        // Start a new pen path
+        state.penPath = {
+            id: generateId(),
+            type: 'vector',
+            points: [{ x: point.x, y: point.y, type: 'corner' }],
+            stroke: state.defaultStroke,
+            strokeWidth: 2,
+            fill: 'transparent',
+            opacity: state.defaultOpacity,
+            closed: false,
+            name: getObjectName('vector')
+        };
+    }
+}
+
+function finalizePenPath() {
+    if (state.penPath && state.penPath.points.length > 1) {
+        // Calculate bounding box
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        state.penPath.points.forEach(p => {
+            minX = Math.min(minX, p.x);
+            minY = Math.min(minY, p.y);
+            maxX = Math.max(maxX, p.x);
+            maxY = Math.max(maxY, p.y);
+        });
+        state.penPath.x = minX;
+        state.penPath.y = minY;
+        state.penPath.width = maxX - minX;
+        state.penPath.height = maxY - minY;
+
+        state.objects.push(state.penPath);
+        state.selectedObjects = [state.penPath];
+        saveHistory();
+        updateLayersPanel();
+        updatePropertiesPanel();
+    }
+    state.penPath = null;
+    render();
+}
+
+function drawPenPreview() {
+    if (!state.penPath || state.penPath.points.length === 0) return;
+
+    const ctx = state.ctx;
+    ctx.save();
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.zoom, state.zoom);
+
+    ctx.strokeStyle = state.penPath.stroke;
+    ctx.lineWidth = state.penPath.strokeWidth;
+    ctx.beginPath();
+
+    const points = state.penPath.points;
+    ctx.moveTo(points[0].x, points[0].y);
+
+    for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+    }
+
+    // Draw to current mouse position
+    if (state.currentPoint) {
+        ctx.lineTo(state.currentPoint.x, state.currentPoint.y);
+    }
+
+    ctx.stroke();
+
+    // Draw points
+    points.forEach((p, i) => {
+        ctx.fillStyle = i === 0 ? '#00ff00' : '#ffffff';
+        ctx.strokeStyle = '#5e5ce6';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+    });
+
+    ctx.restore();
+}
+
+// Image tool - import images
+function handleImageToolDown(point) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const imageObj = {
+                    id: generateId(),
+                    type: 'image',
+                    x: point.x,
+                    y: point.y,
+                    width: img.width,
+                    height: img.height,
+                    src: event.target.result,
+                    opacity: state.defaultOpacity,
+                    rotation: 0,
+                    name: getObjectName('image')
+                };
+
+                // Scale down if too large
+                const maxSize = 500;
+                if (imageObj.width > maxSize || imageObj.height > maxSize) {
+                    const scale = Math.min(maxSize / imageObj.width, maxSize / imageObj.height);
+                    imageObj.width *= scale;
+                    imageObj.height *= scale;
+                }
+
+                state.objects.push(imageObj);
+                state.selectedObjects = [imageObj];
+                saveHistory();
+                updateLayersPanel();
+                updatePropertiesPanel();
+                render();
+
+                // Switch to select tool
+                selectTool('select');
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    };
+
+    input.click();
+}
+
+// Comment tool - add comments
+function handleCommentToolDown(point) {
+    const comment = prompt('Votre commentaire:');
+    if (!comment) return;
+
+    const commentObj = {
+        id: generateId(),
+        type: 'comment',
+        x: point.x,
+        y: point.y,
+        width: 24,
+        height: 24,
+        text: comment,
+        author: 'Utilisateur',
+        date: new Date().toISOString(),
+        resolved: false,
+        name: 'Commentaire'
+    };
+
+    state.objects.push(commentObj);
+    state.selectedObjects = [commentObj];
+    saveHistory();
+    updateLayersPanel();
+    updatePropertiesPanel();
+    render();
+
+    showToast('Commentaire ajouté');
 }
 
 function updateTempObject(point) {
@@ -917,6 +1102,11 @@ function render() {
     }
 
     ctx.restore();
+
+    // Draw pen preview (after restore to handle its own transforms)
+    if (state.penPath && state.penPath.points.length > 0) {
+        drawPenPreview();
+    }
 }
 
 function drawObject(ctx, obj) {
@@ -956,6 +1146,15 @@ function drawObject(ctx, obj) {
             break;
         case 'frame':
             drawFrameObject(ctx, obj);
+            break;
+        case 'image':
+            drawImage(ctx, obj);
+            break;
+        case 'comment':
+            drawComment(ctx, obj);
+            break;
+        case 'vector':
+            drawVector(ctx, obj);
             break;
     }
 
@@ -1200,6 +1399,154 @@ function initToolbar() {
             selectTool(tool);
         });
     });
+
+    // Present button
+    const presentBtn = document.getElementById('present-btn');
+    if (presentBtn) {
+        presentBtn.addEventListener('click', togglePresentMode);
+    }
+}
+
+// Presentation mode - fullscreen presentation of the design
+function togglePresentMode() {
+    state.isPresenting = !state.isPresenting;
+
+    if (state.isPresenting) {
+        enterPresentMode();
+    } else {
+        exitPresentMode();
+    }
+}
+
+function enterPresentMode() {
+    // Create presentation overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'presentation-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: #1e1e1e;
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: none;
+    `;
+
+    // Create presentation canvas
+    const presCanvas = document.createElement('canvas');
+    presCanvas.id = 'presentation-canvas';
+    presCanvas.width = window.innerWidth;
+    presCanvas.height = window.innerHeight;
+    overlay.appendChild(presCanvas);
+
+    // Exit button
+    const exitBtn = document.createElement('button');
+    exitBtn.innerHTML = '✕ Quitter (ESC)';
+    exitBtn.style.cssText = `
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: rgba(255,255,255,0.1);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        opacity: 0;
+        transition: opacity 0.3s;
+    `;
+    exitBtn.addEventListener('click', togglePresentMode);
+    overlay.appendChild(exitBtn);
+
+    // Show exit button on mouse move
+    let hideTimeout;
+    overlay.addEventListener('mousemove', () => {
+        exitBtn.style.opacity = '1';
+        overlay.style.cursor = 'default';
+        clearTimeout(hideTimeout);
+        hideTimeout = setTimeout(() => {
+            exitBtn.style.opacity = '0';
+            overlay.style.cursor = 'none';
+        }, 2000);
+    });
+
+    document.body.appendChild(overlay);
+
+    // Render objects on presentation canvas
+    renderPresentation(presCanvas);
+
+    // Request fullscreen
+    if (overlay.requestFullscreen) {
+        overlay.requestFullscreen().catch(() => {});
+    }
+
+    showToast('Mode présentation - Appuyez sur ESC pour quitter');
+}
+
+function exitPresentMode() {
+    const overlay = document.getElementById('presentation-overlay');
+    if (overlay) {
+        overlay.remove();
+    }
+
+    // Exit fullscreen
+    if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+    }
+
+    state.isPresenting = false;
+    showToast('Retour au mode édition');
+}
+
+function renderPresentation(canvas) {
+    const ctx = canvas.getContext('2d');
+
+    // Clear with background
+    ctx.fillStyle = '#1e1e1e';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Calculate bounds of all objects
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    state.objects.forEach(obj => {
+        const bounds = getObjectBounds(obj);
+        minX = Math.min(minX, bounds.x);
+        minY = Math.min(minY, bounds.y);
+        maxX = Math.max(maxX, bounds.x + bounds.width);
+        maxY = Math.max(maxY, bounds.y + bounds.height);
+    });
+
+    if (minX === Infinity) return; // No objects
+
+    const contentWidth = maxX - minX;
+    const contentHeight = maxY - minY;
+
+    // Calculate scale to fit content in canvas with padding
+    const padding = 50;
+    const scaleX = (canvas.width - padding * 2) / contentWidth;
+    const scaleY = (canvas.height - padding * 2) / contentHeight;
+    const scale = Math.min(scaleX, scaleY, 2); // Max 2x zoom
+
+    // Center the content
+    const offsetX = (canvas.width - contentWidth * scale) / 2 - minX * scale;
+    const offsetY = (canvas.height - contentHeight * scale) / 2 - minY * scale;
+
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
+
+    // Draw all objects (except comments in presentation)
+    state.objects.forEach(obj => {
+        if (obj.type !== 'comment') {
+            drawObject(ctx, obj);
+        }
+    });
+
+    ctx.restore();
 }
 
 function selectTool(tool) {
@@ -1522,7 +1869,10 @@ function getIconForType(type) {
         star: '⭐',
         text: '📝',
         path: '✏️',
-        frame: '📱'
+        frame: '📱',
+        image: '🖼️',
+        comment: '💬',
+        vector: '✒️'
     };
     return icons[type] || '📦';
 }
@@ -2129,10 +2479,27 @@ function initKeyboardShortcuts() {
                 e.preventDefault();
                 break;
             case 'Escape':
-                state.selectedObjects = [];
-                updatePropertiesPanel();
-                updateLayersPanel();
-                render();
+                // Exit presentation mode if active
+                if (state.isPresenting) {
+                    exitPresentMode();
+                }
+                // Cancel pen path if active
+                else if (state.penPath) {
+                    state.penPath = null;
+                    render();
+                } else {
+                    state.selectedObjects = [];
+                    updatePropertiesPanel();
+                    updateLayersPanel();
+                    render();
+                }
+                break;
+            case 'Enter':
+                // Finalize pen path if active
+                if (state.penPath) {
+                    finalizePenPath();
+                    e.preventDefault();
+                }
                 break;
             case '[':
                 sendBackward();
@@ -2762,6 +3129,74 @@ function drawFrameObject(ctx, obj) {
     ctx.font = `${12 / state.zoom}px Inter, sans-serif`;
     ctx.fillText(obj.name, obj.x, obj.y - 8 / state.zoom);
     ctx.restore();
+}
+
+// Draw image object
+function drawImage(ctx, obj) {
+    if (!obj.imageElement) {
+        // Create and cache the image element
+        obj.imageElement = new Image();
+        obj.imageElement.src = obj.src;
+    }
+
+    if (obj.imageElement.complete) {
+        ctx.drawImage(obj.imageElement, obj.x, obj.y, obj.width, obj.height);
+    }
+
+    // Draw border if stroke is set
+    if (obj.strokeWidth > 0) {
+        ctx.strokeStyle = obj.stroke;
+        ctx.lineWidth = obj.strokeWidth;
+        ctx.strokeRect(obj.x, obj.y, obj.width, obj.height);
+    }
+}
+
+// Draw comment marker
+function drawComment(ctx, obj) {
+    const size = 24;
+
+    // Draw comment bubble
+    ctx.beginPath();
+    ctx.fillStyle = '#ffcc00';
+    ctx.arc(obj.x + size / 2, obj.y + size / 2, size / 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw border
+    ctx.strokeStyle = '#cc9900';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Draw comment icon
+    ctx.fillStyle = '#664400';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('💬', obj.x + size / 2, obj.y + size / 2);
+}
+
+// Draw vector path (pen tool)
+function drawVector(ctx, obj) {
+    if (!obj.points || obj.points.length < 2) return;
+
+    ctx.beginPath();
+    ctx.moveTo(obj.points[0].x, obj.points[0].y);
+
+    for (let i = 1; i < obj.points.length; i++) {
+        ctx.lineTo(obj.points[i].x, obj.points[i].y);
+    }
+
+    if (obj.closed) {
+        ctx.closePath();
+    }
+
+    if (obj.fill && obj.fill !== 'transparent') {
+        ctx.fillStyle = obj.fill;
+        ctx.fill();
+    }
+
+    ctx.strokeStyle = obj.stroke;
+    ctx.lineWidth = obj.strokeWidth;
+    ctx.stroke();
 }
 
 // Initialize history
