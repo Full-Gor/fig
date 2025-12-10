@@ -696,9 +696,10 @@ function startTextEditing(obj) {
     textarea.style.top = screenPos.y + 'px';
     textarea.style.fontSize = (obj.fontSize * state.zoom) + 'px';
     textarea.style.fontFamily = obj.fontFamily;
-    textarea.style.color = obj.fill;
-    textarea.style.width = (bounds.width * state.zoom + 20) + 'px';
-    textarea.style.height = (bounds.height * state.zoom + 20) + 'px';
+    textarea.style.color = '#ffffff';
+    textarea.style.backgroundColor = 'rgba(30, 30, 30, 0.95)';
+    textarea.style.width = Math.max(bounds.width * state.zoom + 50, 150) + 'px';
+    textarea.style.height = Math.max(bounds.height * state.zoom + 30, 40) + 'px';
 
     textarea.addEventListener('blur', () => {
         finishTextEditing(textarea);
@@ -884,6 +885,9 @@ function drawObject(ctx, obj) {
             break;
         case 'path':
             drawPath(ctx, obj);
+            break;
+        case 'frame':
+            drawFrameObject(ctx, obj);
             break;
     }
 
@@ -2079,6 +2083,102 @@ document.addEventListener('keydown', (e) => {
         document.getElementById('help-modal').classList.toggle('hidden');
     }
 });
+
+// New file button (icon)
+document.getElementById('new-file-btn')?.addEventListener('click', () => {
+    if (confirm('Créer un nouveau fichier? Les changements non sauvegardés seront perdus.')) {
+        state.objects = [];
+        state.selectedObjects = [];
+        state.history = [];
+        state.historyIndex = -1;
+        state.layerCounter = 0;
+        saveHistory();
+        updateLayersPanel();
+        render();
+        showToast('Nouveau fichier créé');
+    }
+});
+
+// Frame modal
+document.getElementById('close-frame')?.addEventListener('click', () => {
+    document.getElementById('frame-modal').classList.add('hidden');
+});
+
+document.getElementById('frame-modal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'frame-modal') {
+        document.getElementById('frame-modal').classList.add('hidden');
+    }
+});
+
+// Open frame modal when clicking frame tool
+document.querySelector('[data-tool="frame"]')?.addEventListener('dblclick', () => {
+    document.getElementById('frame-modal').classList.remove('hidden');
+});
+
+// Frame options click
+document.querySelectorAll('.frame-option').forEach(option => {
+    option.addEventListener('click', () => {
+        const width = parseInt(option.dataset.width);
+        const height = parseInt(option.dataset.height);
+        const name = option.querySelector('span').textContent;
+
+        createFrame(width, height, name);
+        document.getElementById('frame-modal').classList.add('hidden');
+    });
+});
+
+function createFrame(width, height, name) {
+    // Center the frame in the viewport
+    const canvasRect = state.canvas.getBoundingClientRect();
+    const centerX = (canvasRect.width / 2 - state.panX) / state.zoom - width / 2;
+    const centerY = (canvasRect.height / 2 - state.panY) / state.zoom - height / 2;
+
+    const frame = {
+        id: generateId(),
+        type: 'frame',
+        x: centerX,
+        y: centerY,
+        width: width,
+        height: height,
+        fill: '#ffffff',
+        stroke: '#cccccc',
+        strokeWidth: 1,
+        opacity: 100,
+        rotation: 0,
+        cornerRadius: 0,
+        name: name || `Frame ${state.layerCounter + 1}`
+    };
+
+    state.layerCounter++;
+    state.objects.push(frame);
+    state.selectedObjects = [frame];
+
+    saveHistory();
+    updateLayersPanel();
+    updatePropertiesPanel();
+    render();
+
+    showToast(`Frame "${name}" créé`);
+}
+
+// Add frame drawing function
+function drawFrameObject(ctx, obj) {
+    // Draw white background
+    ctx.fillStyle = obj.fill || '#ffffff';
+    ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
+
+    // Draw border
+    ctx.strokeStyle = obj.stroke || '#cccccc';
+    ctx.lineWidth = obj.strokeWidth || 1;
+    ctx.strokeRect(obj.x, obj.y, obj.width, obj.height);
+
+    // Draw frame name label
+    ctx.save();
+    ctx.fillStyle = '#888888';
+    ctx.font = `${12 / state.zoom}px Inter, sans-serif`;
+    ctx.fillText(obj.name, obj.x, obj.y - 8 / state.zoom);
+    ctx.restore();
+}
 
 // Initialize history
 saveHistory();
