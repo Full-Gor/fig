@@ -731,12 +731,101 @@ function finishTextEditing(textarea) {
 // RENDERING
 // ========================================
 
+function drawGrid(ctx) {
+    const canvas = state.canvas;
+
+    // Calculate grid size based on zoom level
+    // Grid adapts: smaller grid when zoomed in, larger when zoomed out
+    let baseGridSize = 10;
+    let gridSize = baseGridSize * state.zoom;
+
+    // Adjust grid size to keep it visually consistent
+    while (gridSize < 10) {
+        baseGridSize *= 5;
+        gridSize = baseGridSize * state.zoom;
+    }
+    while (gridSize > 50) {
+        baseGridSize /= 5;
+        gridSize = baseGridSize * state.zoom;
+    }
+
+    // Calculate offset based on pan
+    const offsetX = state.panX % gridSize;
+    const offsetY = state.panY % gridSize;
+
+    // Draw minor grid lines (dots or thin lines)
+    ctx.beginPath();
+    ctx.strokeStyle = '#2a2a2a';
+    ctx.lineWidth = 1;
+
+    // Vertical lines
+    for (let x = offsetX; x < canvas.width; x += gridSize) {
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+    }
+
+    // Horizontal lines
+    for (let y = offsetY; y < canvas.height; y += gridSize) {
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+    }
+    ctx.stroke();
+
+    // Draw major grid lines (every 5 units)
+    const majorGridSize = gridSize * 5;
+    const majorOffsetX = state.panX % majorGridSize;
+    const majorOffsetY = state.panY % majorGridSize;
+
+    ctx.beginPath();
+    ctx.strokeStyle = '#333333';
+    ctx.lineWidth = 1;
+
+    // Major vertical lines
+    for (let x = majorOffsetX; x < canvas.width; x += majorGridSize) {
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+    }
+
+    // Major horizontal lines
+    for (let y = majorOffsetY; y < canvas.height; y += majorGridSize) {
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+    }
+    ctx.stroke();
+
+    // Draw origin crosshair (0,0 point)
+    const originX = state.panX;
+    const originY = state.panY;
+
+    if (originX >= 0 && originX <= canvas.width) {
+        ctx.beginPath();
+        ctx.strokeStyle = '#ff5555';
+        ctx.lineWidth = 1;
+        ctx.moveTo(originX, 0);
+        ctx.lineTo(originX, canvas.height);
+        ctx.stroke();
+    }
+
+    if (originY >= 0 && originY <= canvas.height) {
+        ctx.beginPath();
+        ctx.strokeStyle = '#ff5555';
+        ctx.lineWidth = 1;
+        ctx.moveTo(0, originY);
+        ctx.lineTo(canvas.width, originY);
+        ctx.stroke();
+    }
+}
+
 function render() {
     const ctx = state.ctx;
     const canvas = state.canvas;
 
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Clear canvas with background color
+    ctx.fillStyle = '#1e1e1e';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw grid
+    drawGrid(ctx);
 
     // Apply transformations
     ctx.save();
