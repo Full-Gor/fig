@@ -61,7 +61,7 @@ const state = {
 
     // Default styles
     defaultFill: '#5E5CE6',
-    defaultStroke: '#000000',
+    defaultStroke: '#FFFFFF',
     defaultStrokeWidth: 0,
     defaultOpacity: 100,
     defaultCornerRadius: 0,
@@ -418,9 +418,9 @@ function handleTextToolDown(point) {
         x: point.x,
         y: point.y,
         width: 200,
-        height: 30,
+        height: 50,
         text: 'Texte',
-        fontSize: 16,
+        fontSize: 32,
         fontFamily: 'Inter',
         fill: state.defaultFill,
         opacity: state.defaultOpacity,
@@ -446,8 +446,8 @@ function handlePencilToolDown(point) {
         id: generateId(),
         type: 'path',
         points: [point],
-        stroke: state.defaultStroke,
-        strokeWidth: 2,
+        stroke: state.defaultFill, // Use fill color so it's visible on dark background
+        strokeWidth: 3,
         fill: 'transparent',
         opacity: state.defaultOpacity,
         name: getObjectName('path')
@@ -767,11 +767,13 @@ function getObjectBounds(obj) {
     if (obj.type === 'text') {
         state.ctx.font = `${obj.fontSize}px ${obj.fontFamily}`;
         const metrics = state.ctx.measureText(obj.text);
+        const textWidth = Math.max(metrics.width, 50); // Minimum width for easier selection
+        const textHeight = obj.fontSize * 1.4;
         return {
             x: obj.x,
-            y: obj.y - obj.fontSize,
-            width: metrics.width,
-            height: obj.fontSize * 1.2
+            y: obj.y - obj.fontSize * 0.8, // Adjust for text baseline
+            width: textWidth,
+            height: textHeight
         };
     }
 
