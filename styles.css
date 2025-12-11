@@ -1,5 +1,5 @@
 /* ========================================
-   FIGMA CLONE - STYLES
+   DesigneMe - STYLES
    ======================================== */
 
 * {
@@ -81,6 +81,19 @@ body {
 
 .logo:hover {
     background-color: var(--bg-hover);
+}
+
+.logo-text {
+    font-size: 18px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #5E5CE6, #A259FF, #1ABCFE);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.logo-text.large {
+    font-size: 28px;
 }
 
 .menu-items {

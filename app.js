@@ -1,6 +1,6 @@
 /**
- * FIGMA CLONE - Main Application
- * A web-based design tool similar to Figma
+ * DesigneMe - Main Application
+ * A web-based design tool
  */
 
 // ========================================
@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
     resizeCanvas();
     render();
 
-    showToast('Bienvenue dans Figma Clone!', 'success');
+    showToast('Bienvenue dans DesigneMe!', 'success');
 });
 
 function initCanvas() {
@@ -2804,7 +2804,7 @@ document.getElementById('open-file')?.addEventListener('click', async () => {
         try {
             const [handle] = await window.showOpenFilePicker({
                 types: [{
-                    description: 'Figma Clone File',
+                    description: 'DesigneMe File',
                     accept: { 'application/json': ['.figclone', '.json'] }
                 }],
                 multiple: false
@@ -2895,7 +2895,7 @@ document.getElementById('save-file')?.addEventListener('click', async () => {
             const handle = await window.showSaveFilePicker({
                 suggestedName: document.getElementById('file-name').value + '.figclone',
                 types: [{
-                    description: 'Figma Clone File',
+                    description: 'DesigneMe File',
                     accept: { 'application/json': ['.figclone'] }
                 }]
             });
