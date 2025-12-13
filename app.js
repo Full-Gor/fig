@@ -115,12 +115,209 @@ function initEventListeners() {
     canvas.addEventListener('wheel', handleWheel);
     canvas.addEventListener('dblclick', handleDoubleClick);
 
+    // Touch events for mobile/tablet
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+
     // Context menu
     canvas.addEventListener('contextmenu', handleContextMenu);
     document.addEventListener('click', hideContextMenu);
 
     // Prevent default drag
     canvas.addEventListener('dragstart', (e) => e.preventDefault());
+
+    // Initialize mobile panel toggles
+    initMobilePanels();
+}
+
+// ========================================
+// TOUCH EVENT HANDLERS
+// ========================================
+
+let touchState = {
+    lastTouchTime: 0,
+    lastTouchPoint: null,
+    isPinching: false,
+    initialPinchDistance: 0,
+    initialZoom: 1
+};
+
+function handleTouchStart(e) {
+    e.preventDefault();
+
+    if (e.touches.length === 2) {
+        // Pinch zoom start
+        touchState.isPinching = true;
+        touchState.initialPinchDistance = getTouchDistance(e.touches);
+        touchState.initialZoom = state.zoom;
+        return;
+    }
+
+    if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        const now = Date.now();
+
+        // Check for double tap
+        if (now - touchState.lastTouchTime < 300 && touchState.lastTouchPoint) {
+            const dx = touch.clientX - touchState.lastTouchPoint.x;
+            const dy = touch.clientY - touchState.lastTouchPoint.y;
+            if (Math.sqrt(dx * dx + dy * dy) < 30) {
+                // Double tap detected
+                handleDoubleTap(touch);
+                touchState.lastTouchTime = 0;
+                return;
+            }
+        }
+
+        touchState.lastTouchTime = now;
+        touchState.lastTouchPoint = { x: touch.clientX, y: touch.clientY };
+
+        // Simulate mouse down
+        const mouseEvent = createMouseEventFromTouch(touch, 'mousedown');
+        handleMouseDown(mouseEvent);
+    }
+}
+
+function handleTouchMove(e) {
+    e.preventDefault();
+
+    if (touchState.isPinching && e.touches.length === 2) {
+        // Pinch zoom
+        const currentDistance = getTouchDistance(e.touches);
+        const scale = currentDistance / touchState.initialPinchDistance;
+        const newZoom = Math.min(Math.max(touchState.initialZoom * scale, 0.1), 10);
+
+        // Get center point of pinch
+        const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        const rect = state.canvas.getBoundingClientRect();
+        const mouseX = centerX - rect.left;
+        const mouseY = centerY - rect.top;
+
+        // Adjust pan to zoom towards pinch center
+        const zoomRatio = newZoom / state.zoom;
+        state.panX = mouseX - (mouseX - state.panX) * zoomRatio;
+        state.panY = mouseY - (mouseY - state.panY) * zoomRatio;
+
+        state.zoom = newZoom;
+        document.getElementById('zoom-level').textContent = Math.round(state.zoom * 100) + '%';
+        render();
+        return;
+    }
+
+    if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        const mouseEvent = createMouseEventFromTouch(touch, 'mousemove');
+        handleMouseMove(mouseEvent);
+    }
+}
+
+function handleTouchEnd(e) {
+    e.preventDefault();
+
+    if (touchState.isPinching) {
+        touchState.isPinching = false;
+        if (e.touches.length === 0) {
+            return;
+        }
+    }
+
+    if (e.changedTouches.length === 1) {
+        const touch = e.changedTouches[0];
+        const mouseEvent = createMouseEventFromTouch(touch, 'mouseup');
+        handleMouseUp(mouseEvent);
+    }
+}
+
+function handleDoubleTap(touch) {
+    const point = getCanvasPointFromTouch(touch);
+
+    if (state.currentTool === 'select') {
+        const obj = getObjectAtPoint(point);
+        if (obj && obj.type === 'text') {
+            startTextEditing(obj);
+        }
+    }
+}
+
+function createMouseEventFromTouch(touch, type) {
+    return {
+        clientX: touch.clientX,
+        clientY: touch.clientY,
+        button: 0,
+        shiftKey: false,
+        preventDefault: () => {},
+        stopPropagation: () => {}
+    };
+}
+
+function getCanvasPointFromTouch(touch) {
+    const rect = state.canvas.getBoundingClientRect();
+    const x = (touch.clientX - rect.left - state.panX) / state.zoom;
+    const y = (touch.clientY - rect.top - state.panY) / state.zoom;
+    return { x, y };
+}
+
+function getTouchDistance(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+// ========================================
+// MOBILE PANELS
+// ========================================
+
+function initMobilePanels() {
+    // Create mobile panel toggle buttons if they don't exist
+    if (!document.querySelector('.mobile-panel-toggle.left')) {
+        const leftToggle = document.createElement('button');
+        leftToggle.className = 'mobile-panel-toggle left';
+        leftToggle.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>';
+        leftToggle.addEventListener('click', () => toggleMobilePanel('left'));
+        document.body.appendChild(leftToggle);
+    }
+
+    if (!document.querySelector('.mobile-panel-toggle.right')) {
+        const rightToggle = document.createElement('button');
+        rightToggle.className = 'mobile-panel-toggle right';
+        rightToggle.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>';
+        rightToggle.addEventListener('click', () => toggleMobilePanel('right'));
+        document.body.appendChild(rightToggle);
+    }
+
+    // Create overlay
+    if (!document.querySelector('.mobile-overlay')) {
+        const overlay = document.createElement('div');
+        overlay.className = 'mobile-overlay';
+        overlay.addEventListener('click', closeMobilePanels);
+        document.body.appendChild(overlay);
+    }
+}
+
+function toggleMobilePanel(side) {
+    const leftPanel = document.querySelector('.left-panel');
+    const rightPanel = document.querySelector('.right-panel');
+    const overlay = document.querySelector('.mobile-overlay');
+
+    if (side === 'left') {
+        const isOpen = leftPanel.classList.contains('open');
+        leftPanel.classList.toggle('open');
+        rightPanel.classList.remove('open');
+        overlay.classList.toggle('visible', !isOpen);
+    } else {
+        const isOpen = rightPanel.classList.contains('open');
+        rightPanel.classList.toggle('open');
+        leftPanel.classList.remove('open');
+        overlay.classList.toggle('visible', !isOpen);
+    }
+}
+
+function closeMobilePanels() {
+    document.querySelector('.left-panel')?.classList.remove('open');
+    document.querySelector('.right-panel')?.classList.remove('open');
+    document.querySelector('.mobile-overlay')?.classList.remove('visible');
 }
 
 function handleMouseDown(e) {
