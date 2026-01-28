@@ -388,9 +388,15 @@ function handleMouseMove(e) {
         return;
     }
 
-    // Drawing shapes
+    // Drawing shapes or pencil
     if (state.isDrawing && state.tempObject) {
-        updateTempObject(point);
+        if (state.tempObject.type === 'path') {
+            // Pencil drawing - add points
+            state.tempObject.points.push(point);
+        } else {
+            // Shape drawing - update dimensions
+            updateTempObject(point);
+        }
         render();
         return;
     }
@@ -674,8 +680,8 @@ function handlePenToolDown(point) {
             id: generateId(),
             type: 'vector',
             points: [{ x: point.x, y: point.y, type: 'corner' }],
-            stroke: state.defaultStroke,
-            strokeWidth: 2,
+            stroke: state.defaultFill, // Use fill color for visibility
+            strokeWidth: 3,
             fill: 'transparent',
             opacity: state.defaultOpacity,
             closed: false,
@@ -754,14 +760,24 @@ function drawPenPreview() {
 
 // Image tool - import images
 function handleImageToolDown(point) {
+    // Store the insertion point for later use
+    state._imageInsertPoint = { x: point.x, y: point.y };
+    openImageFilePicker();
+}
+
+function openImageFilePicker() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
+    input.style.position = 'absolute';
+    input.style.left = '-9999px';
+    input.style.top = '-9999px';
 
-    input.onchange = (e) => {
+    input.addEventListener('change', (e) => {
         const file = e.target.files[0];
-        if (!file) return;
+        if (!file) { input.remove(); return; }
 
+        const point = state._imageInsertPoint || { x: 100, y: 100 };
         const reader = new FileReader();
         reader.onload = (event) => {
             const img = new Image();
@@ -794,15 +810,20 @@ function handleImageToolDown(point) {
                 updatePropertiesPanel();
                 render();
 
-                // Switch to select tool
                 selectTool('select');
+                showToast('Image ajoutée');
             };
             img.src = event.target.result;
         };
         reader.readAsDataURL(file);
-    };
+        input.remove();
+    });
 
-    input.click();
+    // Must append to body for mobile/touch browsers
+    document.body.appendChild(input);
+
+    // Use setTimeout to ensure browser allows the click from user gesture chain
+    setTimeout(() => { input.click(); }, 50);
 }
 
 // Comment tool - add comments
@@ -1334,6 +1355,20 @@ function drawObject(ctx, obj) {
     ctx.save();
     ctx.globalAlpha = obj.opacity / 100;
 
+    // Apply shadow effect
+    if (obj.shadow) {
+        const s = obj.shadow;
+        const alpha = (s.opacity || 40) / 100;
+        ctx.shadowOffsetX = s.x || 0;
+        ctx.shadowOffsetY = s.y || 0;
+        ctx.shadowBlur = s.blur || 0;
+        // Convert hex color + opacity to rgba
+        const r = parseInt(s.color.slice(1, 3), 16);
+        const g = parseInt(s.color.slice(3, 5), 16);
+        const b = parseInt(s.color.slice(5, 7), 16);
+        ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
     // Apply rotation
     if (obj.rotation) {
         const centerX = obj.x + (obj.width || 0) / 2;
@@ -1836,6 +1871,37 @@ function initPanels() {
         });
     });
 
+    // Layer search filter
+    const layerSearch = document.getElementById('layer-search');
+    if (layerSearch) {
+        layerSearch.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase().trim();
+            const items = document.querySelectorAll('#layers-tree .layer-item:not(.page)');
+            const containers = document.querySelectorAll('#layers-tree .layer-frame-container');
+
+            if (!query) {
+                // Show all
+                items.forEach(item => item.style.display = '');
+                containers.forEach(c => c.style.display = '');
+                return;
+            }
+
+            // Hide containers first, show matching items
+            containers.forEach(c => c.style.display = 'none');
+            items.forEach(item => {
+                const name = item.querySelector('.layer-name');
+                if (name && name.textContent.toLowerCase().includes(query)) {
+                    item.style.display = '';
+                    // Show parent container if this item is inside one
+                    const parent = item.closest('.layer-frame-container');
+                    if (parent) parent.style.display = '';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        });
+    }
+
     // Properties panel inputs
     initPropertiesPanel();
 
@@ -1936,6 +2002,52 @@ function initPropertiesPanel() {
     document.getElementById('stroke-color-preview').addEventListener('click', () => {
         openColorPicker('stroke');
     });
+
+    // Effects / Shadow
+    const effectEnabled = document.getElementById('effect-enabled');
+    const shadowInputs = ['shadow-x', 'shadow-y', 'shadow-blur', 'shadow-color', 'shadow-opacity'];
+
+    if (effectEnabled) {
+        effectEnabled.addEventListener('change', () => {
+            applyEffectToSelection();
+        });
+    }
+
+    shadowInputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', () => {
+                applyEffectToSelection();
+            });
+        }
+    });
+
+    document.getElementById('effect-type')?.addEventListener('change', () => {
+        applyEffectToSelection();
+    });
+}
+
+function applyEffectToSelection() {
+    if (state.selectedObjects.length === 0) return;
+
+    const enabled = document.getElementById('effect-enabled')?.checked || false;
+    const type = document.getElementById('effect-type')?.value || 'shadow';
+    const sx = parseInt(document.getElementById('shadow-x')?.value) || 0;
+    const sy = parseInt(document.getElementById('shadow-y')?.value) || 0;
+    const blur = parseInt(document.getElementById('shadow-blur')?.value) || 0;
+    const color = document.getElementById('shadow-color')?.value || '#000000';
+    const opacity = parseInt(document.getElementById('shadow-opacity')?.value) || 40;
+
+    state.selectedObjects.forEach(obj => {
+        if (enabled) {
+            obj.shadow = { type, x: sx, y: sy, blur, color, opacity };
+        } else {
+            delete obj.shadow;
+        }
+    });
+
+    saveHistory();
+    render();
 }
 
 function updatePropertiesPanel() {
@@ -1979,6 +2091,22 @@ function updatePropertiesPanel() {
         ['corner-tl', 'corner-tr', 'corner-br', 'corner-bl'].forEach(id => {
             document.getElementById(id).value = obj.cornerRadius;
         });
+    }
+
+    // Update shadow/effect controls
+    const effectEnabled = document.getElementById('effect-enabled');
+    if (effectEnabled) {
+        if (obj.shadow) {
+            effectEnabled.checked = true;
+            document.getElementById('effect-type').value = obj.shadow.type || 'shadow';
+            document.getElementById('shadow-x').value = obj.shadow.x || 0;
+            document.getElementById('shadow-y').value = obj.shadow.y || 0;
+            document.getElementById('shadow-blur').value = obj.shadow.blur || 0;
+            document.getElementById('shadow-color').value = obj.shadow.color || '#000000';
+            document.getElementById('shadow-opacity').value = obj.shadow.opacity || 40;
+        } else {
+            effectEnabled.checked = false;
+        }
     }
 }
 

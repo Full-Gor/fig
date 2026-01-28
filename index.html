@@ -274,7 +274,10 @@
             <div class="panel-section">
                 <div class="panel-section-header">
                     <span>Effets</span>
-                    <button class="add-btn" id="add-effect">+</button>
+                    <label class="effect-toggle">
+                        <input type="checkbox" id="effect-enabled">
+                        <span class="toggle-label">Activer</span>
+                    </label>
                 </div>
                 <div class="panel-section-content" id="effects-section">
                     <div class="effect-item">
@@ -283,6 +286,30 @@
                             <option value="inner-shadow">Ombre interne</option>
                             <option value="blur">Flou</option>
                         </select>
+                    </div>
+                    <div class="property-row effect-params">
+                        <div class="property-field">
+                            <label>X</label>
+                            <input type="number" id="shadow-x" value="4" min="-50" max="50">
+                        </div>
+                        <div class="property-field">
+                            <label>Y</label>
+                            <input type="number" id="shadow-y" value="4" min="-50" max="50">
+                        </div>
+                        <div class="property-field">
+                            <label>Flou</label>
+                            <input type="number" id="shadow-blur" value="8" min="0" max="100">
+                        </div>
+                    </div>
+                    <div class="property-row effect-params">
+                        <div class="property-field">
+                            <label>Couleur</label>
+                            <input type="color" id="shadow-color" value="#000000">
+                        </div>
+                        <div class="property-field">
+                            <label>Opacité</label>
+                            <input type="number" id="shadow-opacity" value="40" min="0" max="100">
+                        </div>
                     </div>
                 </div>
             </div>
