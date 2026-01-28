@@ -429,12 +429,6 @@ function handleMouseMove(e) {
         return;
     }
 
-    // Pencil drawing
-    if (state.currentTool === 'pencil' && state.isDrawing && state.tempObject) {
-        state.tempObject.points.push(point);
-        render();
-    }
-
     // Update cursor based on hover
     updateCursor(point);
 }
@@ -655,65 +649,94 @@ function handleTextToolDown(point) {
 function handlePencilToolDown(point) {
     // Draw on top of existing elements - don't select them
     state.isDrawing = true;
+    // Use fill color for stroke (visible on dark bg), fallback to bright green
+    const strokeColor = (state.defaultFill && state.defaultFill !== 'transparent') ? state.defaultFill : '#00FF00';
     state.tempObject = {
         id: generateId(),
         type: 'path',
-        points: [point],
-        stroke: state.defaultFill, // Use fill color so it's visible on dark background
-        strokeWidth: 3,
+        x: point.x,
+        y: point.y,
+        width: 0,
+        height: 0,
+        points: [{ x: point.x, y: point.y }],
+        stroke: strokeColor,
+        strokeWidth: 4,
         fill: 'transparent',
-        opacity: state.defaultOpacity,
+        opacity: 100,
+        rotation: 0,
         name: getObjectName('path')
     };
 }
 
-// Pen tool - for creating vector paths with bezier curves
+// Pen tool - for creating vector paths
 function handlePenToolDown(point) {
     // If we're already drawing a pen path, add a point
     if (state.penPath && state.penPath.points.length > 0) {
+        // Check for closing: if clicking near first point, close the path
+        const first = state.penPath.points[0];
+        const dist = Math.sqrt((point.x - first.x) ** 2 + (point.y - first.y) ** 2);
+        if (dist < 15 && state.penPath.points.length > 2) {
+            state.penPath.closed = true;
+            finalizePenPath();
+            return;
+        }
         state.penPath.points.push({ x: point.x, y: point.y, type: 'corner' });
         render();
         drawPenPreview();
     } else {
         // Start a new pen path
+        const strokeColor = (state.defaultFill && state.defaultFill !== 'transparent') ? state.defaultFill : '#00FF00';
         state.penPath = {
             id: generateId(),
             type: 'vector',
+            x: point.x,
+            y: point.y,
+            width: 0,
+            height: 0,
             points: [{ x: point.x, y: point.y, type: 'corner' }],
-            stroke: state.defaultFill, // Use fill color for visibility
+            stroke: strokeColor,
             strokeWidth: 3,
             fill: 'transparent',
-            opacity: state.defaultOpacity,
+            opacity: 100,
+            rotation: 0,
             closed: false,
             name: getObjectName('vector')
         };
+        render();
+        drawPenPreview();
     }
 }
 
 function finalizePenPath() {
-    if (state.penPath && state.penPath.points.length >= 1) {
-        // Calculate bounding box
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        state.penPath.points.forEach(p => {
-            minX = Math.min(minX, p.x);
-            minY = Math.min(minY, p.y);
-            maxX = Math.max(maxX, p.x);
-            maxY = Math.max(maxY, p.y);
-        });
-        // Ensure minimum size for single-point paths
-        state.penPath.x = minX;
-        state.penPath.y = minY;
-        state.penPath.width = Math.max(maxX - minX, 10);
-        state.penPath.height = Math.max(maxY - minY, 10);
-
-        state.objects.push(state.penPath);
-        state.selectedObjects = [state.penPath];
-        saveHistory();
-        updateLayersPanel();
-        updatePropertiesPanel();
-
-        showToast('Tracé ajouté aux calques');
+    if (!state.penPath || !state.penPath.points || state.penPath.points.length < 1) {
+        state.penPath = null;
+        render();
+        return;
     }
+
+    // Calculate bounding box from points
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    state.penPath.points.forEach(p => {
+        minX = Math.min(minX, p.x);
+        minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x);
+        maxY = Math.max(maxY, p.y);
+    });
+
+    state.penPath.x = minX;
+    state.penPath.y = minY;
+    state.penPath.width = Math.max(maxX - minX, 10);
+    state.penPath.height = Math.max(maxY - minY, 10);
+
+    // Add to objects array
+    state.objects.push(state.penPath);
+    state.selectedObjects = [state.penPath];
+    saveHistory();
+    updateLayersPanel();
+    updatePropertiesPanel();
+
+    showToast('Tracé vectoriel ajouté');
+
     state.penPath = null;
     render();
 }
@@ -758,50 +781,47 @@ function drawPenPreview() {
     ctx.restore();
 }
 
-// Image tool - import images
-function handleImageToolDown(point) {
-    // Store the insertion point for later use
-    state._imageInsertPoint = { x: point.x, y: point.y };
-    openImageFilePicker();
-}
-
-function openImageFilePicker() {
+// Image tool - import images via persistent hidden input
+(function initImageInput() {
+    // Create a persistent hidden file input at page load
     const input = document.createElement('input');
     input.type = 'file';
+    input.id = 'image-file-input';
     input.accept = 'image/*';
-    input.style.position = 'absolute';
-    input.style.left = '-9999px';
-    input.style.top = '-9999px';
+    input.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none;';
 
-    input.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) { input.remove(); return; }
+    input.addEventListener('change', function() {
+        const file = this.files[0];
+        if (!file) return;
 
-        const point = state._imageInsertPoint || { x: 100, y: 100 };
+        const pt = state._imageInsertPoint || { x: 100, y: 100 };
         const reader = new FileReader();
-        reader.onload = (event) => {
+        reader.onload = function(event) {
             const img = new Image();
-            img.onload = () => {
-                const imageObj = {
-                    id: generateId(),
-                    type: 'image',
-                    x: point.x,
-                    y: point.y,
-                    width: img.width,
-                    height: img.height,
-                    src: event.target.result,
-                    opacity: state.defaultOpacity,
-                    rotation: 0,
-                    name: getObjectName('image')
-                };
+            img.onload = function() {
+                let w = img.width;
+                let h = img.height;
 
                 // Scale down if too large
                 const maxSize = 500;
-                if (imageObj.width > maxSize || imageObj.height > maxSize) {
-                    const scale = Math.min(maxSize / imageObj.width, maxSize / imageObj.height);
-                    imageObj.width *= scale;
-                    imageObj.height *= scale;
+                if (w > maxSize || h > maxSize) {
+                    const s = Math.min(maxSize / w, maxSize / h);
+                    w = Math.round(w * s);
+                    h = Math.round(h * s);
                 }
+
+                const imageObj = {
+                    id: generateId(),
+                    type: 'image',
+                    x: pt.x,
+                    y: pt.y,
+                    width: w,
+                    height: h,
+                    src: event.target.result,
+                    opacity: 100,
+                    rotation: 0,
+                    name: getObjectName('image')
+                };
 
                 state.objects.push(imageObj);
                 state.selectedObjects = [imageObj];
@@ -809,21 +829,27 @@ function openImageFilePicker() {
                 updateLayersPanel();
                 updatePropertiesPanel();
                 render();
-
                 selectTool('select');
                 showToast('Image ajoutée');
             };
             img.src = event.target.result;
         };
         reader.readAsDataURL(file);
-        input.remove();
+
+        // Reset input so same file can be selected again
+        this.value = '';
     });
 
-    // Must append to body for mobile/touch browsers
     document.body.appendChild(input);
+})();
 
-    // Use setTimeout to ensure browser allows the click from user gesture chain
-    setTimeout(() => { input.click(); }, 50);
+function handleImageToolDown(point) {
+    state._imageInsertPoint = { x: point.x, y: point.y };
+    // Trigger the persistent file input
+    var input = document.getElementById('image-file-input');
+    if (input) {
+        input.click();
+    }
 }
 
 // Comment tool - add comments
@@ -998,17 +1024,34 @@ function getObjectBounds(obj) {
     if (obj.type === 'text') {
         state.ctx.font = `${obj.fontSize}px ${obj.fontFamily}`;
         const metrics = state.ctx.measureText(obj.text);
-        const textWidth = Math.max(metrics.width, 50); // Minimum width for easier selection
+        const textWidth = Math.max(metrics.width, 50);
         const textHeight = obj.fontSize * 1.4;
         return {
             x: obj.x,
-            y: obj.y - obj.fontSize * 0.8, // Adjust for text baseline
+            y: obj.y - obj.fontSize * 0.8,
             width: textWidth,
             height: textHeight
         };
     }
 
-    return { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
+    // Path (pencil) and vector (pen) objects
+    if ((obj.type === 'path' || obj.type === 'vector') && obj.points && obj.points.length > 0) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        obj.points.forEach(p => {
+            minX = Math.min(minX, p.x);
+            minY = Math.min(minY, p.y);
+            maxX = Math.max(maxX, p.x);
+            maxY = Math.max(maxY, p.y);
+        });
+        return {
+            x: minX - 5,
+            y: minY - 5,
+            width: Math.max(maxX - minX + 10, 10),
+            height: Math.max(maxY - minY + 10, 10)
+        };
+    }
+
+    return { x: obj.x || 0, y: obj.y || 0, width: obj.width || 0, height: obj.height || 0 };
 }
 
 function getResizeHandleAtPoint(point) {
@@ -1872,35 +1915,7 @@ function initPanels() {
     });
 
     // Layer search filter
-    const layerSearch = document.getElementById('layer-search');
-    if (layerSearch) {
-        layerSearch.addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase().trim();
-            const items = document.querySelectorAll('#layers-tree .layer-item:not(.page)');
-            const containers = document.querySelectorAll('#layers-tree .layer-frame-container');
-
-            if (!query) {
-                // Show all
-                items.forEach(item => item.style.display = '');
-                containers.forEach(c => c.style.display = '');
-                return;
-            }
-
-            // Hide containers first, show matching items
-            containers.forEach(c => c.style.display = 'none');
-            items.forEach(item => {
-                const name = item.querySelector('.layer-name');
-                if (name && name.textContent.toLowerCase().includes(query)) {
-                    item.style.display = '';
-                    // Show parent container if this item is inside one
-                    const parent = item.closest('.layer-frame-container');
-                    if (parent) parent.style.display = '';
-                } else {
-                    item.style.display = 'none';
-                }
-            });
-        });
-    }
+    initLayerSearch();
 
     // Properties panel inputs
     initPropertiesPanel();
@@ -1910,6 +1925,50 @@ function initPanels() {
 
     // Color picker
     initColorPicker();
+}
+
+function initLayerSearch() {
+    var searchInput = document.getElementById('layer-search');
+    if (!searchInput) return;
+
+    searchInput.addEventListener('input', function() {
+        var query = this.value.toLowerCase().trim();
+        var tree = document.getElementById('layers-tree');
+        if (!tree) return;
+
+        // Get ALL elements in the tree (items, containers, children divs)
+        var allItems = tree.querySelectorAll('.layer-item:not(.page)');
+        var allContainers = tree.querySelectorAll('.layer-frame-container');
+
+        if (!query) {
+            // Show everything
+            allItems.forEach(function(el) { el.style.display = ''; });
+            allContainers.forEach(function(el) { el.style.display = ''; });
+            var allChildren = tree.querySelectorAll('.layer-children');
+            allChildren.forEach(function(el) { el.style.display = ''; });
+            return;
+        }
+
+        // First hide all containers
+        allContainers.forEach(function(el) { el.style.display = 'none'; });
+
+        // Then check each item
+        allItems.forEach(function(item) {
+            var nameEl = item.querySelector('.layer-name');
+            var name = nameEl ? nameEl.textContent.toLowerCase() : '';
+            if (name.indexOf(query) !== -1) {
+                item.style.display = '';
+                // Show its parent containers
+                var parent = item.parentElement;
+                while (parent && parent !== tree) {
+                    parent.style.display = '';
+                    parent = parent.parentElement;
+                }
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    });
 }
 
 function initPropertiesPanel() {
@@ -2004,43 +2063,55 @@ function initPropertiesPanel() {
     });
 
     // Effects / Shadow
-    const effectEnabled = document.getElementById('effect-enabled');
-    const shadowInputs = ['shadow-x', 'shadow-y', 'shadow-blur', 'shadow-color', 'shadow-opacity'];
-
+    var effectEnabled = document.getElementById('effect-enabled');
     if (effectEnabled) {
-        effectEnabled.addEventListener('change', () => {
+        effectEnabled.addEventListener('change', function() {
             applyEffectToSelection();
         });
     }
 
-    shadowInputs.forEach(id => {
-        const el = document.getElementById(id);
+    ['shadow-x', 'shadow-y', 'shadow-blur', 'shadow-color', 'shadow-opacity'].forEach(function(id) {
+        var el = document.getElementById(id);
         if (el) {
-            el.addEventListener('change', () => {
+            el.addEventListener('change', function() {
+                applyEffectToSelection();
+            });
+            el.addEventListener('input', function() {
                 applyEffectToSelection();
             });
         }
     });
 
-    document.getElementById('effect-type')?.addEventListener('change', () => {
-        applyEffectToSelection();
-    });
+    var effectType = document.getElementById('effect-type');
+    if (effectType) {
+        effectType.addEventListener('change', function() {
+            applyEffectToSelection();
+        });
+    }
 }
 
 function applyEffectToSelection() {
     if (state.selectedObjects.length === 0) return;
 
-    const enabled = document.getElementById('effect-enabled')?.checked || false;
-    const type = document.getElementById('effect-type')?.value || 'shadow';
-    const sx = parseInt(document.getElementById('shadow-x')?.value) || 0;
-    const sy = parseInt(document.getElementById('shadow-y')?.value) || 0;
-    const blur = parseInt(document.getElementById('shadow-blur')?.value) || 0;
-    const color = document.getElementById('shadow-color')?.value || '#000000';
-    const opacity = parseInt(document.getElementById('shadow-opacity')?.value) || 40;
+    var enabledEl = document.getElementById('effect-enabled');
+    var typeEl = document.getElementById('effect-type');
+    var sxEl = document.getElementById('shadow-x');
+    var syEl = document.getElementById('shadow-y');
+    var blurEl = document.getElementById('shadow-blur');
+    var colorEl = document.getElementById('shadow-color');
+    var opacityEl = document.getElementById('shadow-opacity');
 
-    state.selectedObjects.forEach(obj => {
+    var enabled = enabledEl ? enabledEl.checked : false;
+    var type = typeEl ? typeEl.value : 'shadow';
+    var sx = sxEl ? (parseInt(sxEl.value) || 0) : 4;
+    var sy = syEl ? (parseInt(syEl.value) || 0) : 4;
+    var blur = blurEl ? (parseInt(blurEl.value) || 0) : 8;
+    var color = colorEl ? colorEl.value : '#000000';
+    var opacity = opacityEl ? (parseInt(opacityEl.value) || 40) : 40;
+
+    state.selectedObjects.forEach(function(obj) {
         if (enabled) {
-            obj.shadow = { type, x: sx, y: sy, blur, color, opacity };
+            obj.shadow = { type: type, x: sx, y: sy, blur: blur, color: color, opacity: opacity };
         } else {
             delete obj.shadow;
         }
@@ -2094,18 +2165,24 @@ function updatePropertiesPanel() {
     }
 
     // Update shadow/effect controls
-    const effectEnabled = document.getElementById('effect-enabled');
-    if (effectEnabled) {
+    var effectEnabledEl = document.getElementById('effect-enabled');
+    if (effectEnabledEl) {
         if (obj.shadow) {
-            effectEnabled.checked = true;
-            document.getElementById('effect-type').value = obj.shadow.type || 'shadow';
-            document.getElementById('shadow-x').value = obj.shadow.x || 0;
-            document.getElementById('shadow-y').value = obj.shadow.y || 0;
-            document.getElementById('shadow-blur').value = obj.shadow.blur || 0;
-            document.getElementById('shadow-color').value = obj.shadow.color || '#000000';
-            document.getElementById('shadow-opacity').value = obj.shadow.opacity || 40;
+            effectEnabledEl.checked = true;
+            var etEl = document.getElementById('effect-type');
+            var sxEl = document.getElementById('shadow-x');
+            var syEl = document.getElementById('shadow-y');
+            var sbEl = document.getElementById('shadow-blur');
+            var scEl = document.getElementById('shadow-color');
+            var soEl = document.getElementById('shadow-opacity');
+            if (etEl) etEl.value = obj.shadow.type || 'shadow';
+            if (sxEl) sxEl.value = obj.shadow.x || 0;
+            if (syEl) syEl.value = obj.shadow.y || 0;
+            if (sbEl) sbEl.value = obj.shadow.blur || 0;
+            if (scEl) scEl.value = obj.shadow.color || '#000000';
+            if (soEl) soEl.value = obj.shadow.opacity || 40;
         } else {
-            effectEnabled.checked = false;
+            effectEnabledEl.checked = false;
         }
     }
 }
@@ -2115,7 +2192,7 @@ function updateLayersPanel() {
     const pageItem = tree.querySelector('.layer-item.page');
 
     // Remove all layer items except the page
-    tree.querySelectorAll('.layer-item:not(.page), .layer-children').forEach(el => el.remove());
+    tree.querySelectorAll('.layer-item:not(.page), .layer-children, .layer-frame-container').forEach(el => el.remove());
 
     // Separate frames and other objects
     const frames = state.objects.filter(obj => obj.type === 'frame');
