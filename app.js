@@ -608,7 +608,17 @@ function handleShapeToolDown(point) {
 }
 
 function handleTextToolDown(point) {
-    // Create text at click point - don't select existing objects
+    // If currently editing text, finish that first and switch to select
+    if (state.isEditingText) {
+        const existingTextarea = document.querySelector('.text-input-overlay');
+        if (existingTextarea) {
+            finishTextEditing(existingTextarea);
+        }
+        selectTool('select');
+        return;
+    }
+
+    // Create text at click point
     const textObj = {
         id: generateId(),
         type: 'text',
@@ -632,7 +642,7 @@ function handleTextToolDown(point) {
     updatePropertiesPanel();
     render();
 
-    // Start editing immediately
+    // Start editing immediately, then switch to select tool when done
     startTextEditing(textObj);
 }
 
@@ -675,7 +685,7 @@ function handlePenToolDown(point) {
 }
 
 function finalizePenPath() {
-    if (state.penPath && state.penPath.points.length > 1) {
+    if (state.penPath && state.penPath.points.length >= 1) {
         // Calculate bounding box
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         state.penPath.points.forEach(p => {
@@ -684,16 +694,19 @@ function finalizePenPath() {
             maxX = Math.max(maxX, p.x);
             maxY = Math.max(maxY, p.y);
         });
+        // Ensure minimum size for single-point paths
         state.penPath.x = minX;
         state.penPath.y = minY;
-        state.penPath.width = maxX - minX;
-        state.penPath.height = maxY - minY;
+        state.penPath.width = Math.max(maxX - minX, 10);
+        state.penPath.height = Math.max(maxY - minY, 10);
 
         state.objects.push(state.penPath);
         state.selectedObjects = [state.penPath];
         saveHistory();
         updateLayersPanel();
         updatePropertiesPanel();
+
+        showToast('Tracé ajouté aux calques');
     }
     state.penPath = null;
     render();
@@ -1158,6 +1171,12 @@ function startTextEditing(obj) {
 }
 
 function finishTextEditing(textarea) {
+    // Guard against double-call
+    if (!state.isEditingText && !state.editingTextObject) {
+        if (textarea && textarea.parentNode) textarea.remove();
+        return;
+    }
+
     if (state.editingTextObject) {
         const newText = textarea.value.trim();
         if (newText) {
@@ -1175,9 +1194,12 @@ function finishTextEditing(textarea) {
 
     state.isEditingText = false;
     state.editingTextObject = null;
-    textarea.remove();
+    if (textarea && textarea.parentNode) textarea.remove();
     updateLayersPanel();
     render();
+
+    // Switch to select tool after finishing text editing
+    selectTool('select');
 }
 
 // ========================================
@@ -1749,6 +1771,11 @@ function renderPresentation(canvas) {
 }
 
 function selectTool(tool) {
+    // Auto-finalize pen path if switching away from pen tool
+    if (state.penPath && state.penPath.points.length > 0 && tool !== 'pen') {
+        finalizePenPath();
+    }
+
     state.currentTool = tool;
 
     // Update UI
