@@ -4167,8 +4167,8 @@ function generateCSSStyles(objects) {
     objects.forEach((obj, index) => {
         const className = sanitizeClassName(obj.name || `element-${index}`);
 
-        // Skip path/vector/line types - they use inline SVG styles
-        if (obj.type === 'path' || obj.type === 'vector' || obj.type === 'line') {
+        // Skip SVG-based types - they use inline SVG styles
+        if (obj.type === 'path' || obj.type === 'vector' || obj.type === 'line' || obj.type === 'polygon' || obj.type === 'star') {
             return; // SVG elements have inline styles
         }
 
@@ -4270,6 +4270,21 @@ function generateHTMLElements(objects) {
                 html += `${indent}<div class="${className}"></div>\n`;
                 break;
 
+            case 'polygon':
+                // Export polygon as SVG
+                html += generatePolygonSVG(obj, className, indent);
+                break;
+
+            case 'star':
+                // Export star as SVG
+                html += generateStarSVG(obj, className, indent);
+                break;
+
+            case 'comment':
+                // Export comment as a marker div
+                html += `${indent}<div class="${className}" data-type="comment" title="${escapeHTML(obj.text || 'Commentaire')}">💬</div>\n`;
+                break;
+
             default:
                 html += `${indent}<div class="${className}"></div>\n`;
                 break;
@@ -4277,6 +4292,62 @@ function generateHTMLElements(objects) {
     });
 
     return html;
+}
+
+// Generate SVG for polygon elements
+function generatePolygonSVG(obj, className, indent) {
+    const sides = obj.sides || 3;
+    const stroke = obj.stroke || '#000000';
+    const strokeWidth = obj.strokeWidth || 2;
+    const fill = obj.fill && obj.fill !== 'transparent' ? obj.fill : 'none';
+
+    const width = obj.width + strokeWidth * 2;
+    const height = obj.height + strokeWidth * 2;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const radius = Math.min(obj.width, obj.height) / 2;
+
+    // Generate polygon points
+    let points = '';
+    for (let i = 0; i < sides; i++) {
+        const angle = (i * 2 * Math.PI / sides) - Math.PI / 2;
+        const x = centerX + radius * Math.cos(angle);
+        const y = centerY + radius * Math.sin(angle);
+        points += `${x.toFixed(1)},${y.toFixed(1)} `;
+    }
+
+    return `${indent}<svg class="${className}" width="${width}" height="${height}" style="position:absolute;left:${Math.round(obj.x - strokeWidth)}px;top:${Math.round(obj.y - strokeWidth)}px;overflow:visible;">
+${indent}    <polygon points="${points.trim()}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>
+${indent}</svg>\n`;
+}
+
+// Generate SVG for star elements
+function generateStarSVG(obj, className, indent) {
+    const numPoints = obj.starPoints || obj.points || 5;
+    const stroke = obj.stroke || '#000000';
+    const strokeWidth = obj.strokeWidth || 2;
+    const fill = obj.fill && obj.fill !== 'transparent' ? obj.fill : 'none';
+
+    const width = obj.width + strokeWidth * 2;
+    const height = obj.height + strokeWidth * 2;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const outerRadius = Math.min(obj.width, obj.height) / 2;
+    const innerRadius = outerRadius * (obj.innerRadius || 0.5);
+
+    // Generate star points
+    let points = '';
+    for (let i = 0; i < numPoints * 2; i++) {
+        const radius = i % 2 === 0 ? outerRadius : innerRadius;
+        const angle = (i * Math.PI / numPoints) - Math.PI / 2;
+        const x = centerX + radius * Math.cos(angle);
+        const y = centerY + radius * Math.sin(angle);
+        points += `${x.toFixed(1)},${y.toFixed(1)} `;
+    }
+
+    return `${indent}<svg class="${className}" width="${width}" height="${height}" style="position:absolute;left:${Math.round(obj.x - strokeWidth)}px;top:${Math.round(obj.y - strokeWidth)}px;overflow:visible;">
+${indent}    <polygon points="${points.trim()}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>
+${indent}</svg>\n`;
 }
 
 // Generate SVG for line elements
@@ -4435,8 +4506,8 @@ function generateJSXStyles(objects) {
     objects.forEach((obj, index) => {
         const styleName = camelCase(obj.name || `element${index}`);
 
-        // Skip path/vector/line types - they use inline styles in SVG
-        if (obj.type === 'path' || obj.type === 'vector' || obj.type === 'line') {
+        // Skip SVG-based types - they use inline styles in SVG
+        if (obj.type === 'path' || obj.type === 'vector' || obj.type === 'line' || obj.type === 'polygon' || obj.type === 'star') {
             return;
         }
 
@@ -4522,6 +4593,18 @@ function generateJSXElements(objects) {
                 jsx += `${indent}<div style={styles.${styleName}} />\n`;
                 break;
 
+            case 'polygon':
+                jsx += generatePolygonJSX(obj, indent);
+                break;
+
+            case 'star':
+                jsx += generateStarJSX(obj, indent);
+                break;
+
+            case 'comment':
+                jsx += `${indent}<div style={{position: 'absolute', left: ${Math.round(obj.x)}, top: ${Math.round(obj.y)}, fontSize: 24}} title="${escapeHTML(obj.text || 'Commentaire')}">💬</div>\n`;
+                break;
+
             default:
                 jsx += `${indent}<div style={styles.${styleName}} />\n`;
                 break;
@@ -4529,6 +4612,60 @@ function generateJSXElements(objects) {
     });
 
     return jsx;
+}
+
+// Generate JSX SVG for polygon elements
+function generatePolygonJSX(obj, indent) {
+    const sides = obj.sides || 3;
+    const stroke = obj.stroke || '#000000';
+    const strokeWidth = obj.strokeWidth || 2;
+    const fill = obj.fill && obj.fill !== 'transparent' ? obj.fill : 'none';
+
+    const width = obj.width + strokeWidth * 2;
+    const height = obj.height + strokeWidth * 2;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const radius = Math.min(obj.width, obj.height) / 2;
+
+    let points = '';
+    for (let i = 0; i < sides; i++) {
+        const angle = (i * 2 * Math.PI / sides) - Math.PI / 2;
+        const x = centerX + radius * Math.cos(angle);
+        const y = centerY + radius * Math.sin(angle);
+        points += `${x.toFixed(1)},${y.toFixed(1)} `;
+    }
+
+    return `${indent}<svg width={${width}} height={${height}} style={{position: 'absolute', left: ${Math.round(obj.x - strokeWidth)}, top: ${Math.round(obj.y - strokeWidth)}, overflow: 'visible'}}>
+${indent}    <polygon points="${points.trim()}" fill="${fill}" stroke="${stroke}" strokeWidth={${strokeWidth}} strokeLinejoin="round" />
+${indent}</svg>\n`;
+}
+
+// Generate JSX SVG for star elements
+function generateStarJSX(obj, indent) {
+    const numPoints = obj.starPoints || obj.points || 5;
+    const stroke = obj.stroke || '#000000';
+    const strokeWidth = obj.strokeWidth || 2;
+    const fill = obj.fill && obj.fill !== 'transparent' ? obj.fill : 'none';
+
+    const width = obj.width + strokeWidth * 2;
+    const height = obj.height + strokeWidth * 2;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const outerRadius = Math.min(obj.width, obj.height) / 2;
+    const innerRadius = outerRadius * (obj.innerRadius || 0.5);
+
+    let points = '';
+    for (let i = 0; i < numPoints * 2; i++) {
+        const radius = i % 2 === 0 ? outerRadius : innerRadius;
+        const angle = (i * Math.PI / numPoints) - Math.PI / 2;
+        const x = centerX + radius * Math.cos(angle);
+        const y = centerY + radius * Math.sin(angle);
+        points += `${x.toFixed(1)},${y.toFixed(1)} `;
+    }
+
+    return `${indent}<svg width={${width}} height={${height}} style={{position: 'absolute', left: ${Math.round(obj.x - strokeWidth)}, top: ${Math.round(obj.y - strokeWidth)}, overflow: 'visible'}}>
+${indent}    <polygon points="${points.trim()}" fill="${fill}" stroke="${stroke}" strokeWidth={${strokeWidth}} strokeLinejoin="round" />
+${indent}</svg>\n`;
 }
 
 // Generate JSX SVG for line elements
