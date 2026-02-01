@@ -1823,6 +1823,157 @@ body.resizing-panels * {
     color: white;
 }
 
+/* ========================================
+   CODE EXPORT MODAL
+   ======================================== */
+
+.code-export-modal {
+    width: 700px;
+    max-width: 95vw;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.code-export-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.code-export-header span {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.code-export-tabs {
+    display: flex;
+    padding: 12px 24px 0;
+    gap: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.code-tab {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 12px 20px;
+    cursor: pointer;
+    border-radius: 8px 8px 0 0;
+    transition: all var(--transition-fast);
+    position: relative;
+}
+
+.code-tab:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.code-tab.active {
+    background-color: var(--bg-tertiary);
+    color: var(--accent-color);
+}
+
+.code-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: var(--accent-color);
+}
+
+.code-export-body {
+    flex: 1;
+    overflow: hidden;
+    padding: 20px 24px;
+}
+
+.code-tab-content {
+    display: none;
+    height: 100%;
+}
+
+.code-tab-content.active {
+    display: block;
+}
+
+.code-preview {
+    background-color: #1a1a2e;
+    border-radius: 8px;
+    padding: 16px;
+    height: 400px;
+    max-height: 50vh;
+    overflow: auto;
+}
+
+.code-preview pre {
+    margin: 0;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.code-preview code {
+    color: #e0e0e0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.code-export-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 24px;
+    border-top: 1px solid var(--border-color);
+}
+
+.btn-copy, .btn-download {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    border: none;
+}
+
+.btn-copy {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.btn-copy:hover {
+    background-color: var(--bg-hover);
+}
+
+.btn-download {
+    background-color: var(--accent-color);
+    color: white;
+}
+
+.btn-download:hover {
+    background-color: var(--accent-hover);
+}
+
+/* Syntax highlighting for code */
+.code-preview .tag { color: #ff7eb6; }
+.code-preview .attr-name { color: #78dce8; }
+.code-preview .attr-value { color: #a9dc76; }
+.code-preview .string { color: #a9dc76; }
+.code-preview .comment { color: #727072; }
+.code-preview .keyword { color: #ff6188; }
+.code-preview .property { color: #ffd866; }
+
 @media (max-width: 700px) {
     .new-project-options {
         grid-template-columns: repeat(2, 1fr);

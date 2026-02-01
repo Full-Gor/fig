@@ -359,6 +359,9 @@ function handleMouseDown(e) {
             case 'pen':
                 handlePenToolDown(point);
                 break;
+            case 'eraser':
+                handleEraserToolDown(point);
+                break;
             case 'image':
                 handleImageToolDown(point);
                 break;
@@ -393,6 +396,10 @@ function handleMouseMove(e) {
         if (state.tempObject.type === 'path') {
             // Pencil drawing - add points
             state.tempObject.points.push(point);
+        } else if (state.tempObject.type === 'eraser') {
+            // Eraser tool - handled separately
+            handleEraserToolMove(point);
+            return;
         } else {
             // Shape drawing - update dimensions
             updateTempObject(point);
@@ -442,7 +449,11 @@ function handleMouseUp(e) {
     }
 
     if (state.isDrawing && state.tempObject) {
-        finalizeObject();
+        if (state.tempObject.type === 'eraser') {
+            handleEraserToolUp();
+        } else {
+            finalizeObject();
+        }
     }
 
     if (state.isDragging) {
@@ -777,6 +788,117 @@ function drawPenPreview() {
         ctx.fill();
         ctx.stroke();
     });
+
+    ctx.restore();
+}
+
+// ========================================
+// ERASER TOOL
+// ========================================
+
+function handleEraserToolDown(point) {
+    state.isDrawing = true;
+    state.tempObject = {
+        type: 'eraser',
+        points: [{ x: point.x, y: point.y }],
+        size: 20 // Default eraser size
+    };
+}
+
+function handleEraserToolMove(point) {
+    if (!state.isDrawing || !state.tempObject || state.tempObject.type !== 'eraser') return;
+
+    state.tempObject.points.push(point);
+
+    // Erase objects that intersect with the eraser path
+    const eraserSize = state.tempObject.size;
+    const lastPoint = point;
+
+    // Find and remove objects under the eraser
+    const objectsToRemove = [];
+
+    state.objects.forEach(obj => {
+        const bounds = getObjectBounds(obj);
+
+        // Check if the eraser point is within the object bounds (with padding for eraser size)
+        if (lastPoint.x >= bounds.x - eraserSize &&
+            lastPoint.x <= bounds.x + bounds.width + eraserSize &&
+            lastPoint.y >= bounds.y - eraserSize &&
+            lastPoint.y <= bounds.y + bounds.height + eraserSize) {
+            objectsToRemove.push(obj);
+        }
+    });
+
+    // Remove objects that were touched by the eraser
+    objectsToRemove.forEach(obj => {
+        const index = state.objects.indexOf(obj);
+        if (index > -1) {
+            state.objects.splice(index, 1);
+            // Also remove from selection if selected
+            const selIndex = state.selectedObjects.indexOf(obj);
+            if (selIndex > -1) {
+                state.selectedObjects.splice(selIndex, 1);
+            }
+        }
+    });
+
+    if (objectsToRemove.length > 0) {
+        render();
+        drawEraserPreview();
+    } else {
+        render();
+        drawEraserPreview();
+    }
+}
+
+function handleEraserToolUp() {
+    if (!state.isDrawing || !state.tempObject || state.tempObject.type !== 'eraser') return;
+
+    state.isDrawing = false;
+    state.tempObject = null;
+
+    saveHistory();
+    updateLayersPanel();
+    updatePropertiesPanel();
+    render();
+}
+
+function drawEraserPreview() {
+    if (!state.tempObject || state.tempObject.type !== 'eraser') return;
+
+    const ctx = state.ctx;
+    const points = state.tempObject.points;
+    if (points.length === 0) return;
+
+    ctx.save();
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.zoom, state.zoom);
+
+    // Draw eraser cursor at last point
+    const lastPoint = points[points.length - 1];
+    const size = state.tempObject.size;
+
+    ctx.strokeStyle = '#ff6b6b';
+    ctx.lineWidth = 2 / state.zoom;
+    ctx.setLineDash([5 / state.zoom, 5 / state.zoom]);
+    ctx.beginPath();
+    ctx.arc(lastPoint.x, lastPoint.y, size / 2, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Draw eraser path
+    if (points.length > 1) {
+        ctx.strokeStyle = 'rgba(255, 107, 107, 0.5)';
+        ctx.lineWidth = size;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.stroke();
+    }
 
     ctx.restore();
 }
@@ -1873,6 +1995,8 @@ function getCursorForTool(tool) {
             return 'grab';
         case 'text':
             return 'text';
+        case 'eraser':
+            return 'crosshair';
         default:
             return 'crosshair';
     }
@@ -2826,6 +2950,7 @@ function initKeyboardShortcuts() {
             'l': 'line',
             't': 'text',
             'p': 'pen',
+            'e': 'eraser',
             'c': 'comment'
         };
 
@@ -3911,4 +4036,347 @@ document.addEventListener('DOMContentLoaded', () => {
 document.querySelector('.logo')?.addEventListener('click', () => {
     loadRecentProjects();
     document.getElementById('home-modal').classList.remove('hidden');
+});
+
+// ========================================
+// CODE EXPORT
+// ========================================
+
+let currentCodeTab = 'html-css';
+
+function initCodeExportModal() {
+    // Export code menu click
+    document.getElementById('export-code')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        openCodeExportModal();
+    });
+
+    // Close modal
+    document.getElementById('close-code-export')?.addEventListener('click', () => {
+        document.getElementById('code-export-modal').classList.add('hidden');
+    });
+
+    // Close on overlay click
+    document.getElementById('code-export-modal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'code-export-modal') {
+            document.getElementById('code-export-modal').classList.add('hidden');
+        }
+    });
+
+    // Tab switching
+    document.querySelectorAll('.code-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.code-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.code-tab-content').forEach(c => c.classList.remove('active'));
+
+            tab.classList.add('active');
+            const tabId = tab.dataset.tab + '-tab';
+            document.getElementById(tabId).classList.add('active');
+            currentCodeTab = tab.dataset.tab;
+        });
+    });
+
+    // Copy code
+    document.getElementById('copy-code')?.addEventListener('click', () => {
+        const codeElement = currentCodeTab === 'html-css'
+            ? document.getElementById('html-css-code')
+            : document.getElementById('jsx-code');
+
+        const code = codeElement.textContent;
+        navigator.clipboard.writeText(code).then(() => {
+            showToast('Code copié dans le presse-papiers!', 'success');
+        }).catch(() => {
+            showToast('Erreur lors de la copie', 'error');
+        });
+    });
+
+    // Download code
+    document.getElementById('download-code')?.addEventListener('click', () => {
+        const codeElement = currentCodeTab === 'html-css'
+            ? document.getElementById('html-css-code')
+            : document.getElementById('jsx-code');
+
+        const code = codeElement.textContent;
+        const extension = currentCodeTab === 'html-css' ? 'html' : 'jsx';
+        const filename = `designeme-export.${extension}`;
+
+        const blob = new Blob([code], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        showToast(`Fichier ${filename} téléchargé!`, 'success');
+    });
+}
+
+function openCodeExportModal() {
+    const modal = document.getElementById('code-export-modal');
+    modal.classList.remove('hidden');
+
+    // Generate code for both tabs
+    generateHTMLCSS();
+    generateJSX();
+}
+
+function generateHTMLCSS() {
+    const objects = state.objects;
+    let html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DesigneMe Export</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #f5f5f5;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .canvas-container {
+            position: relative;
+            background-color: #ffffff;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+${generateCSSStyles(objects)}
+    </style>
+</head>
+<body>
+    <div class="canvas-container">
+${generateHTMLElements(objects)}
+    </div>
+</body>
+</html>`;
+
+    document.getElementById('html-css-code').textContent = html;
+}
+
+function generateCSSStyles(objects) {
+    let css = '';
+
+    objects.forEach((obj, index) => {
+        const className = sanitizeClassName(obj.name || `element-${index}`);
+        let style = `        .${className} {\n`;
+        style += `            position: absolute;\n`;
+        style += `            left: ${Math.round(obj.x)}px;\n`;
+        style += `            top: ${Math.round(obj.y)}px;\n`;
+
+        if (obj.width) style += `            width: ${Math.round(obj.width)}px;\n`;
+        if (obj.height) style += `            height: ${Math.round(obj.height)}px;\n`;
+
+        // Background color
+        if (obj.fill && obj.fill !== 'transparent') {
+            style += `            background-color: ${obj.fill};\n`;
+        }
+
+        // Border
+        if (obj.strokeWidth > 0 && obj.stroke) {
+            style += `            border: ${obj.strokeWidth}px solid ${obj.stroke};\n`;
+        }
+
+        // Border radius
+        if (obj.cornerRadius > 0) {
+            style += `            border-radius: ${obj.cornerRadius}px;\n`;
+        } else if (obj.type === 'ellipse') {
+            style += `            border-radius: 50%;\n`;
+        }
+
+        // Opacity
+        if (obj.opacity < 100) {
+            style += `            opacity: ${obj.opacity / 100};\n`;
+        }
+
+        // Rotation
+        if (obj.rotation !== 0) {
+            style += `            transform: rotate(${obj.rotation}deg);\n`;
+        }
+
+        // Text styles
+        if (obj.type === 'text') {
+            style += `            font-size: ${obj.fontSize || 16}px;\n`;
+            style += `            font-family: ${obj.fontFamily || 'Inter, sans-serif'};\n`;
+            if (obj.fontWeight) style += `            font-weight: ${obj.fontWeight};\n`;
+            style += `            color: ${obj.fill || '#000000'};\n`;
+            if (obj.textAlign) style += `            text-align: ${obj.textAlign};\n`;
+        }
+
+        // Shadow
+        if (obj.shadow) {
+            const s = obj.shadow;
+            const alpha = (s.opacity || 40) / 100;
+            style += `            box-shadow: ${s.x || 0}px ${s.y || 0}px ${s.blur || 0}px rgba(0,0,0,${alpha});\n`;
+        }
+
+        style += `        }\n`;
+        css += style;
+    });
+
+    return css;
+}
+
+function generateHTMLElements(objects) {
+    let html = '';
+
+    objects.forEach((obj, index) => {
+        const className = sanitizeClassName(obj.name || `element-${index}`);
+        let indent = '        ';
+
+        switch (obj.type) {
+            case 'text':
+                html += `${indent}<p class="${className}">${escapeHTML(obj.text || '')}</p>\n`;
+                break;
+            case 'image':
+                html += `${indent}<img class="${className}" src="${obj.src || ''}" alt="${obj.name || 'image'}">\n`;
+                break;
+            case 'frame':
+                html += `${indent}<div class="${className}" data-type="frame"></div>\n`;
+                break;
+            default:
+                html += `${indent}<div class="${className}"></div>\n`;
+                break;
+        }
+    });
+
+    return html;
+}
+
+function generateJSX() {
+    const objects = state.objects;
+    let jsx = `import React from 'react';
+
+function DesigneMeExport() {
+    return (
+        <div style={styles.container}>
+${generateJSXElements(objects)}
+        </div>
+    );
+}
+
+const styles = {
+    container: {
+        position: 'relative',
+        backgroundColor: '#ffffff',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+    },
+${generateJSXStyles(objects)}
+};
+
+export default DesigneMeExport;`;
+
+    document.getElementById('jsx-code').textContent = jsx;
+}
+
+function generateJSXStyles(objects) {
+    let styles = '';
+
+    objects.forEach((obj, index) => {
+        const styleName = camelCase(obj.name || `element${index}`);
+        let style = `    ${styleName}: {\n`;
+        style += `        position: 'absolute',\n`;
+        style += `        left: ${Math.round(obj.x)},\n`;
+        style += `        top: ${Math.round(obj.y)},\n`;
+
+        if (obj.width) style += `        width: ${Math.round(obj.width)},\n`;
+        if (obj.height) style += `        height: ${Math.round(obj.height)},\n`;
+
+        if (obj.fill && obj.fill !== 'transparent') {
+            style += `        backgroundColor: '${obj.fill}',\n`;
+        }
+
+        if (obj.strokeWidth > 0 && obj.stroke) {
+            style += `        border: '${obj.strokeWidth}px solid ${obj.stroke}',\n`;
+        }
+
+        if (obj.cornerRadius > 0) {
+            style += `        borderRadius: ${obj.cornerRadius},\n`;
+        } else if (obj.type === 'ellipse') {
+            style += `        borderRadius: '50%',\n`;
+        }
+
+        if (obj.opacity < 100) {
+            style += `        opacity: ${obj.opacity / 100},\n`;
+        }
+
+        if (obj.rotation !== 0) {
+            style += `        transform: 'rotate(${obj.rotation}deg)',\n`;
+        }
+
+        if (obj.type === 'text') {
+            style += `        fontSize: ${obj.fontSize || 16},\n`;
+            style += `        fontFamily: '${obj.fontFamily || 'Inter, sans-serif'}',\n`;
+            if (obj.fontWeight) style += `        fontWeight: ${obj.fontWeight},\n`;
+            style += `        color: '${obj.fill || '#000000'}',\n`;
+        }
+
+        if (obj.shadow) {
+            const s = obj.shadow;
+            const alpha = (s.opacity || 40) / 100;
+            style += `        boxShadow: '${s.x || 0}px ${s.y || 0}px ${s.blur || 0}px rgba(0,0,0,${alpha})',\n`;
+        }
+
+        style += `    },\n`;
+        styles += style;
+    });
+
+    return styles;
+}
+
+function generateJSXElements(objects) {
+    let jsx = '';
+
+    objects.forEach((obj, index) => {
+        const styleName = camelCase(obj.name || `element${index}`);
+        let indent = '            ';
+
+        switch (obj.type) {
+            case 'text':
+                jsx += `${indent}<p style={styles.${styleName}}>${escapeHTML(obj.text || '')}</p>\n`;
+                break;
+            case 'image':
+                jsx += `${indent}<img style={styles.${styleName}} src="${obj.src || ''}" alt="${obj.name || 'image'}" />\n`;
+                break;
+            default:
+                jsx += `${indent}<div style={styles.${styleName}} />\n`;
+                break;
+        }
+    });
+
+    return jsx;
+}
+
+// Helper functions for code generation
+function sanitizeClassName(name) {
+    return name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .replace(/^(\d)/, 'el-$1') || 'element';
+}
+
+function camelCase(str) {
+    return str
+        .replace(/[^a-zA-Z0-9]+(.)/g, (_, chr) => chr.toUpperCase())
+        .replace(/^[A-Z]/, chr => chr.toLowerCase())
+        .replace(/^(\d)/, 'el$1') || 'element';
+}
+
+function escapeHTML(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+// Initialize code export modal when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    initCodeExportModal();
 });

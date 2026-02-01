@@ -30,7 +30,8 @@
                         <a href="#" id="new-file">Nouveau fichier</a>
                         <a href="#" id="open-file">Ouvrir <span class="shortcut">Ctrl+O</span></a>
                         <a href="#" id="save-file">Sauvegarder <span class="shortcut">Ctrl+S</span></a>
-                        <a href="#" id="export-file">Exporter</a>
+                        <a href="#" id="export-file">Exporter Image</a>
+                        <a href="#" id="export-code">Exporter Code</a>
                     </div>
                 </div>
                 <div class="menu-item dropdown">
@@ -127,6 +128,11 @@
                 <button class="tool-btn" data-tool="pencil" title="Crayon">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                    </svg>
+                </button>
+                <button class="tool-btn" data-tool="eraser" title="Gomme (E)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M16.24 3.56l4.95 4.94c.78.79.78 2.05 0 2.84L12 20.53a4.008 4.008 0 01-5.66 0L2.81 17c-.78-.79-.78-2.05 0-2.84l10.6-10.6c.79-.78 2.05-.78 2.83 0zM4.22 15.58l3.54 3.53c.78.79 2.04.79 2.83 0l3.53-3.53-4.95-4.95-4.95 4.95z"/>
                     </svg>
                 </button>
             </div>
@@ -502,6 +508,10 @@
                             <span class="help-desc">Plume - Dessiner des tracés vectoriels</span>
                         </div>
                         <div class="help-item">
+                            <span class="help-key">E</span>
+                            <span class="help-desc">Gomme - Effacer des éléments</span>
+                        </div>
+                        <div class="help-item">
                             <span class="help-key">F</span>
                             <span class="help-desc">Cadre - Créer des frames</span>
                         </div>
@@ -734,6 +744,46 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Code Export Modal -->
+    <div class="modal hidden" id="code-export-modal">
+        <div class="modal-content code-export-modal">
+            <div class="code-export-header">
+                <span>Exporter le Code</span>
+                <button class="close-modal" id="close-code-export">&times;</button>
+            </div>
+            <div class="code-export-tabs">
+                <button class="code-tab active" data-tab="html-css">HTML/CSS</button>
+                <button class="code-tab" data-tab="jsx">JSX</button>
+            </div>
+            <div class="code-export-body">
+                <div class="code-tab-content active" id="html-css-tab">
+                    <div class="code-preview">
+                        <pre><code id="html-css-code"></code></pre>
+                    </div>
+                </div>
+                <div class="code-tab-content" id="jsx-tab">
+                    <div class="code-preview">
+                        <pre><code id="jsx-code"></code></pre>
+                    </div>
+                </div>
+            </div>
+            <div class="code-export-actions">
+                <button class="btn-copy" id="copy-code">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                    </svg>
+                    Copier
+                </button>
+                <button class="btn-download" id="download-code">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                    </svg>
+                    Télécharger
+                </button>
             </div>
         </div>
     </div>
