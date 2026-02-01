@@ -862,133 +862,140 @@ function handleEraserToolUp() {
 // Effacer les objets sous le point donné
 function eraseObjectsAtPoint(point) {
     const eraserRadius = state.eraserSize / 2;
-    const objectsToRemove = [];
-    const newPathSegments = [];
 
+    // Parcourir tous les objets de la fin vers le début (du dessus vers le dessous)
     for (let i = state.objects.length - 1; i >= 0; i--) {
         const obj = state.objects[i];
 
-        // Pour les paths (tracés au crayon), effacement par segments
-        if ((obj.type === 'path' || obj.type === 'vector') && obj.points && obj.points.length > 1) {
-            const result = erasePathSegments(obj, point, eraserRadius);
-
-            if (result.modified) {
-                // Retirer l'objet original
-                state.objects.splice(i, 1);
-
-                // Retirer de la sélection
-                const selIndex = state.selectedObjects.indexOf(obj);
-                if (selIndex > -1) {
-                    state.selectedObjects.splice(selIndex, 1);
-                }
-
-                // Ajouter les nouveaux segments (s'il y en a)
-                result.segments.forEach(seg => {
-                    if (seg.points.length >= 2) {
-                        newPathSegments.push(seg);
-                    }
-                });
-            }
-        } else {
-            // Pour les autres objets, suppression complète si touché
-            if (isPointInObject(point, obj, eraserRadius)) {
-                objectsToRemove.push(obj);
-            }
+        // Ignorer les frames/groupes de base (fond)
+        if (obj.type === 'frame' && obj.isBackground) {
+            continue;
         }
-    }
 
-    // Supprimer les objets non-path touchés
-    objectsToRemove.forEach(obj => {
-        const index = state.objects.indexOf(obj);
-        if (index > -1) {
-            state.objects.splice(index, 1);
+        // Vérifier si la gomme touche cet objet
+        if (isEraserTouchingObject(point, obj, eraserRadius)) {
+            // Supprimer l'objet
+            state.objects.splice(i, 1);
+
+            // Retirer de la sélection si présent
             const selIndex = state.selectedObjects.indexOf(obj);
             if (selIndex > -1) {
                 state.selectedObjects.splice(selIndex, 1);
             }
         }
-    });
-
-    // Ajouter les nouveaux segments de path
-    newPathSegments.forEach(seg => {
-        state.objects.push(seg);
-    });
+    }
 }
 
-// Effacer des segments d'un path et retourner les parties restantes
-function erasePathSegments(obj, eraserPoint, eraserRadius) {
-    const points = obj.points;
-    const strokeWidth = obj.strokeWidth || 2;
-    const hitRadius = eraserRadius + strokeWidth / 2;
+// Vérifier si la gomme touche un objet
+function isEraserTouchingObject(eraserPoint, obj, eraserRadius) {
+    // Pour les paths (tracés au crayon/pinceau), vérifier chaque segment
+    if ((obj.type === 'path' || obj.type === 'vector') && obj.points && obj.points.length > 0) {
+        const strokeWidth = obj.strokeWidth || 2;
+        const hitDistance = eraserRadius + strokeWidth / 2;
 
-    // Trouver les indices des points à effacer
-    const pointsToErase = new Set();
-
-    for (let i = 0; i < points.length; i++) {
-        const p = points[i];
-        const dist = Math.sqrt((eraserPoint.x - p.x) ** 2 + (eraserPoint.y - p.y) ** 2);
-        if (dist <= hitRadius) {
-            pointsToErase.add(i);
-        }
-    }
-
-    // Vérifier aussi les segments entre les points
-    for (let i = 0; i < points.length - 1; i++) {
-        const p1 = points[i];
-        const p2 = points[i + 1];
-        const dist = distanceToLineSegment(eraserPoint.x, eraserPoint.y, p1.x, p1.y, p2.x, p2.y);
-        if (dist <= hitRadius) {
-            pointsToErase.add(i);
-            pointsToErase.add(i + 1);
-        }
-    }
-
-    if (pointsToErase.size === 0) {
-        return { modified: false, segments: [] };
-    }
-
-    // Créer les segments restants
-    const segments = [];
-    let currentSegment = [];
-
-    for (let i = 0; i < points.length; i++) {
-        if (!pointsToErase.has(i)) {
-            currentSegment.push({ ...points[i] });
-        } else {
-            // Point effacé - terminer le segment courant s'il existe
-            if (currentSegment.length >= 2) {
-                segments.push(createPathSegment(obj, currentSegment));
+        // Vérifier chaque point du tracé
+        for (let i = 0; i < obj.points.length; i++) {
+            const p = obj.points[i];
+            const dist = Math.sqrt(
+                (eraserPoint.x - p.x) ** 2 +
+                (eraserPoint.y - p.y) ** 2
+            );
+            if (dist <= hitDistance) {
+                return true;
             }
-            currentSegment = [];
+        }
+
+        // Vérifier aussi les lignes entre les points
+        for (let i = 0; i < obj.points.length - 1; i++) {
+            const p1 = obj.points[i];
+            const p2 = obj.points[i + 1];
+            const dist = distanceToLineSegment(
+                eraserPoint.x, eraserPoint.y,
+                p1.x, p1.y, p2.x, p2.y
+            );
+            if (dist <= hitDistance) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Pour les lignes
+    if (obj.type === 'line') {
+        const strokeWidth = obj.strokeWidth || 2;
+        const hitDistance = eraserRadius + strokeWidth / 2;
+
+        // Utiliser les coordonnées de la ligne
+        const x1 = obj.x;
+        const y1 = obj.y;
+        const x2 = obj.x + (obj.width || 0);
+        const y2 = obj.y + (obj.height || 0);
+
+        const dist = distanceToLineSegment(
+            eraserPoint.x, eraserPoint.y,
+            x1, y1, x2, y2
+        );
+        return dist <= hitDistance;
+    }
+
+    // Pour les ellipses
+    if (obj.type === 'ellipse') {
+        const cx = obj.x + obj.width / 2;
+        const cy = obj.y + obj.height / 2;
+        const rx = obj.width / 2;
+        const ry = obj.height / 2;
+
+        // Distance du point au centre
+        const dx = eraserPoint.x - cx;
+        const dy = eraserPoint.y - cy;
+
+        // Vérifier si on est près du contour de l'ellipse
+        const normalizedDist = (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry);
+
+        // Si l'ellipse est remplie, toucher l'intérieur compte aussi
+        if (obj.fill && obj.fill !== 'transparent') {
+            return normalizedDist <= Math.pow(1 + eraserRadius / Math.min(rx, ry), 2);
+        }
+
+        // Sinon, seulement le contour
+        const strokeWidth = obj.strokeWidth || 2;
+        const innerR = 1 - (strokeWidth + eraserRadius) / Math.min(rx, ry);
+        const outerR = 1 + (strokeWidth + eraserRadius) / Math.min(rx, ry);
+        return normalizedDist >= innerR * innerR && normalizedDist <= outerR * outerR;
+    }
+
+    // Pour les rectangles, frames, et autres formes avec bounding box
+    const hitMargin = eraserRadius;
+    const left = obj.x - hitMargin;
+    const right = obj.x + obj.width + hitMargin;
+    const top = obj.y - hitMargin;
+    const bottom = obj.y + obj.height + hitMargin;
+
+    // Si le point est dans la bounding box élargie
+    if (eraserPoint.x >= left && eraserPoint.x <= right &&
+        eraserPoint.y >= top && eraserPoint.y <= bottom) {
+
+        // Si l'objet est rempli, toucher l'intérieur compte
+        if (obj.fill && obj.fill !== 'transparent') {
+            return true;
+        }
+
+        // Sinon, vérifier si on est près des bords
+        const strokeWidth = obj.strokeWidth || 1;
+        const borderDist = strokeWidth / 2 + eraserRadius;
+
+        // Près du bord gauche ou droit
+        if (eraserPoint.x <= obj.x + borderDist || eraserPoint.x >= obj.x + obj.width - borderDist) {
+            return true;
+        }
+        // Près du bord haut ou bas
+        if (eraserPoint.y <= obj.y + borderDist || eraserPoint.y >= obj.y + obj.height - borderDist) {
+            return true;
         }
     }
 
-    // Ajouter le dernier segment s'il existe
-    if (currentSegment.length >= 2) {
-        segments.push(createPathSegment(obj, currentSegment));
-    }
-
-    return { modified: true, segments: segments };
-}
-
-// Créer un nouveau segment de path à partir de points
-function createPathSegment(originalObj, points) {
-    const bounds = calculatePointsBounds(points);
-    return {
-        id: generateId(),
-        type: originalObj.type,
-        x: bounds.minX,
-        y: bounds.minY,
-        width: bounds.maxX - bounds.minX,
-        height: bounds.maxY - bounds.minY,
-        points: points,
-        stroke: originalObj.stroke,
-        strokeWidth: originalObj.strokeWidth,
-        fill: originalObj.fill || 'transparent',
-        opacity: originalObj.opacity || 100,
-        rotation: 0,
-        name: getObjectName(originalObj.type)
-    };
+    return false;
 }
 
 // Vérifier si un point touche un objet (avec marge de la gomme)

@@ -2157,6 +2157,7 @@ body.resizing-panels * {
         overflow-x: auto;
         overflow-y: hidden;
         justify-content: flex-start;
+        align-items: center;
         gap: 4px;
         z-index: 200;
         border-top: 1px solid var(--border-color);
@@ -2165,6 +2166,13 @@ body.resizing-panels * {
 
     .toolbar::-webkit-scrollbar {
         display: none;
+    }
+
+    /* Tool groups should be horizontal on mobile */
+    .toolbar .tool-group {
+        flex-direction: row;
+        gap: 4px;
+        flex-shrink: 0;
     }
 
     .tool-divider {
