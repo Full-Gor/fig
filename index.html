@@ -190,6 +190,21 @@
             </div>
         </aside>
 
+        <!-- Mobile Panel Toggle Buttons -->
+        <button class="mobile-panel-toggle left" id="toggle-left-panel" title="Calques">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/>
+            </svg>
+        </button>
+        <button class="mobile-panel-toggle right" id="toggle-right-panel" title="Propriétés">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 3h7v18h-7zM5 7h7M5 12h7M5 17h4"/>
+            </svg>
+        </button>
+
+        <!-- Mobile Overlay -->
+        <div class="mobile-overlay" id="mobile-overlay"></div>
+
         <!-- Canvas Area -->
         <main class="canvas-area">
             <div class="canvas-wrapper" id="canvas-wrapper">
@@ -338,6 +353,29 @@
                         </div>
                         <div class="property-field">
                             <input type="number" id="corner-bl" value="0" min="0">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Brush/Pencil Options (visible only when pencil tool is selected) -->
+            <div class="panel-section" id="brush-options" style="display: none;">
+                <div class="panel-section-header">
+                    <span>Options Crayon</span>
+                </div>
+                <div class="panel-section-content">
+                    <div class="property-row">
+                        <div class="property-field full-width">
+                            <label>Taille</label>
+                            <input type="range" id="brush-size" min="1" max="100" value="4">
+                            <input type="number" id="brush-size-num" min="1" max="100" value="4">
+                            <span class="unit">px</span>
+                        </div>
+                    </div>
+                    <div class="property-row">
+                        <div class="property-field full-width">
+                            <label>Couleur</label>
+                            <input type="color" id="brush-color" value="#5E5CE6">
                         </div>
                     </div>
                 </div>

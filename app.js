@@ -72,6 +72,10 @@ const state = {
     eraserOpacity: 100,
     lastEraserPoint: null,
 
+    // Brush/Pencil options
+    brushSize: 4,
+    brushColor: '#5E5CE6',
+
     // Layer counter
     layerCounter: 0
 };
@@ -402,8 +406,8 @@ function handleMouseMove(e) {
         if (state.tempObject.type === 'path') {
             // Pencil drawing - add points
             state.tempObject.points.push(point);
-        } else if (state.tempObject.type === 'eraser-stroke') {
-            // Eraser tool - handled separately with interpolation
+        } else if (state.currentTool === 'eraser') {
+            // Eraser tool - handled separately
             handleEraserToolMove(point);
             return;
         } else {
@@ -454,10 +458,10 @@ function handleMouseUp(e) {
         state.canvas.style.cursor = getCursorForTool(state.currentTool);
     }
 
-    if (state.isDrawing && state.tempObject) {
-        if (state.tempObject.type === 'eraser-stroke') {
+    if (state.isDrawing) {
+        if (state.currentTool === 'eraser') {
             handleEraserToolUp();
-        } else {
+        } else if (state.tempObject) {
             finalizeObject();
         }
     }
@@ -666,8 +670,11 @@ function handleTextToolDown(point) {
 function handlePencilToolDown(point) {
     // Draw on top of existing elements - don't select them
     state.isDrawing = true;
-    // Use fill color for stroke (visible on dark bg), fallback to bright green
-    const strokeColor = (state.defaultFill && state.defaultFill !== 'transparent') ? state.defaultFill : '#00FF00';
+    // Use brush color, or fill color if set, fallback to bright green
+    let strokeColor = state.brushColor || '#5E5CE6';
+    if (!state.brushColor && state.defaultFill && state.defaultFill !== 'transparent') {
+        strokeColor = state.defaultFill;
+    }
     state.tempObject = {
         id: generateId(),
         type: 'path',
@@ -677,7 +684,7 @@ function handlePencilToolDown(point) {
         height: 0,
         points: [{ x: point.x, y: point.y }],
         stroke: strokeColor,
-        strokeWidth: 4,
+        strokeWidth: state.brushSize || 4,
         fill: 'transparent',
         opacity: 100,
         rotation: 0,
@@ -799,39 +806,28 @@ function drawPenPreview() {
 }
 
 // ========================================
-// ERASER TOOL - Effacement pixel par pixel
+// ERASER TOOL - Suppression d'objets vectoriels
 // ========================================
 
 function handleEraserToolDown(point) {
     state.isDrawing = true;
     state.lastEraserPoint = { x: point.x, y: point.y };
 
-    // Créer un objet eraser-stroke pour stocker le tracé d'effacement
-    state.tempObject = {
-        id: generateId(),
-        type: 'eraser-stroke',
-        points: [{ x: point.x, y: point.y }],
-        size: state.eraserSize,
-        hardness: state.eraserHardness,
-        opacity: state.eraserOpacity,
-        name: getObjectName('eraser')
-    };
-
-    // Dessiner le premier point d'effacement
-    drawEraserPoint(point.x, point.y);
+    // Effacer les objets sous le curseur au premier clic
+    eraseObjectsAtPoint(point);
     render();
     drawEraserCursor(point);
 }
 
 function handleEraserToolMove(point) {
-    if (!state.isDrawing || !state.tempObject || state.tempObject.type !== 'eraser-stroke') return;
+    if (!state.isDrawing) return;
 
-    // Interpoler les points pour un tracé fluide (éviter les trous)
+    // Interpoler les points pour un effacement fluide
     if (state.lastEraserPoint) {
         const dx = point.x - state.lastEraserPoint.x;
         const dy = point.y - state.lastEraserPoint.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
-        const step = Math.max(1, state.eraserSize / 4); // Plus le brush est grand, plus on espace les points
+        const step = Math.max(1, state.eraserSize / 4);
 
         if (distance > step) {
             const steps = Math.ceil(distance / step);
@@ -839,13 +835,10 @@ function handleEraserToolMove(point) {
                 const t = i / steps;
                 const interpX = state.lastEraserPoint.x + dx * t;
                 const interpY = state.lastEraserPoint.y + dy * t;
-
-                state.tempObject.points.push({ x: interpX, y: interpY });
-                drawEraserPoint(interpX, interpY);
+                eraseObjectsAtPoint({ x: interpX, y: interpY });
             }
         } else {
-            state.tempObject.points.push({ x: point.x, y: point.y });
-            drawEraserPoint(point.x, point.y);
+            eraseObjectsAtPoint(point);
         }
     }
 
@@ -855,50 +848,108 @@ function handleEraserToolMove(point) {
 }
 
 function handleEraserToolUp() {
-    if (!state.isDrawing || !state.tempObject || state.tempObject.type !== 'eraser-stroke') return;
-
-    // Ajouter le tracé d'effacement aux objets
-    if (state.tempObject.points.length > 0) {
-        state.objects.push(state.tempObject);
-        saveHistory();
-        updateLayersPanel();
-    }
+    if (!state.isDrawing) return;
 
     state.isDrawing = false;
-    state.tempObject = null;
     state.lastEraserPoint = null;
 
+    saveHistory();
+    updateLayersPanel();
+    updatePropertiesPanel();
     render();
 }
 
-// Dessiner un point d'effacement avec taille, dureté et opacité
-function drawEraserPoint(x, y) {
-    const ctx = state.ctx;
-    const size = state.eraserSize;
-    const hardness = state.eraserHardness / 100;
-    const opacity = state.eraserOpacity / 100;
+// Effacer les objets sous le point donné
+function eraseObjectsAtPoint(point) {
+    const eraserRadius = state.eraserSize / 2;
+    const objectsToRemove = [];
 
-    ctx.save();
-    ctx.translate(state.panX, state.panY);
-    ctx.scale(state.zoom, state.zoom);
+    state.objects.forEach(obj => {
+        // Vérifier si le point est dans l'objet
+        if (isPointInObject(point, obj, eraserRadius)) {
+            objectsToRemove.push(obj);
+        }
+    });
 
-    // Mode effacement
-    ctx.globalCompositeOperation = 'destination-out';
+    // Supprimer les objets touchés
+    objectsToRemove.forEach(obj => {
+        const index = state.objects.indexOf(obj);
+        if (index > -1) {
+            state.objects.splice(index, 1);
+            // Retirer de la sélection aussi
+            const selIndex = state.selectedObjects.indexOf(obj);
+            if (selIndex > -1) {
+                state.selectedObjects.splice(selIndex, 1);
+            }
+        }
+    });
+}
 
-    // Créer un gradient radial pour simuler la dureté
-    const gradient = ctx.createRadialGradient(x, y, 0, x, y, size / 2);
-    const innerRadius = hardness * 0.9; // Zone nette au centre
+// Vérifier si un point touche un objet (avec marge de la gomme)
+function isPointInObject(point, obj, margin) {
+    const bounds = getObjectBounds(obj);
 
-    gradient.addColorStop(0, `rgba(0, 0, 0, ${opacity})`);
-    gradient.addColorStop(innerRadius, `rgba(0, 0, 0, ${opacity})`);
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); // Bords flous
+    // Vérification basique avec bounding box + marge
+    if (point.x < bounds.x - margin ||
+        point.x > bounds.x + bounds.width + margin ||
+        point.y < bounds.y - margin ||
+        point.y > bounds.y + bounds.height + margin) {
+        return false;
+    }
 
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.arc(x, y, size / 2, 0, Math.PI * 2);
-    ctx.fill();
+    // Pour les paths/vectors, vérifier la proximité avec les points du tracé
+    if ((obj.type === 'path' || obj.type === 'vector') && obj.points) {
+        for (let i = 0; i < obj.points.length; i++) {
+            const p = obj.points[i];
+            const dist = Math.sqrt((point.x - p.x) ** 2 + (point.y - p.y) ** 2);
+            if (dist <= margin + (obj.strokeWidth || 2)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-    ctx.restore();
+    // Pour les ellipses, vérifier si le point est dans l'ellipse
+    if (obj.type === 'ellipse') {
+        const cx = bounds.x + bounds.width / 2;
+        const cy = bounds.y + bounds.height / 2;
+        const rx = bounds.width / 2 + margin;
+        const ry = bounds.height / 2 + margin;
+        const normalized = ((point.x - cx) ** 2) / (rx ** 2) + ((point.y - cy) ** 2) / (ry ** 2);
+        return normalized <= 1;
+    }
+
+    // Pour les lignes, vérifier la distance au segment
+    if (obj.type === 'line') {
+        const x1 = bounds.x;
+        const y1 = bounds.y;
+        const x2 = bounds.x + bounds.width;
+        const y2 = bounds.y + bounds.height;
+        const dist = distanceToLineSegment(point.x, point.y, x1, y1, x2, y2);
+        return dist <= margin + (obj.strokeWidth || 2);
+    }
+
+    // Pour les autres formes (rectangle, frame, etc.), utiliser la bounding box
+    return true;
+}
+
+// Distance d'un point à un segment de ligne
+function distanceToLineSegment(px, py, x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lengthSquared = dx * dx + dy * dy;
+
+    if (lengthSquared === 0) {
+        return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+    }
+
+    let t = ((px - x1) * dx + (py - y1) * dy) / lengthSquared;
+    t = Math.max(0, Math.min(1, t));
+
+    const nearestX = x1 + t * dx;
+    const nearestY = y1 + t * dy;
+
+    return Math.sqrt((px - nearestX) ** 2 + (py - nearestY) ** 2);
 }
 
 // Dessiner le curseur de la gomme
@@ -910,57 +961,26 @@ function drawEraserCursor(point) {
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.zoom, state.zoom);
 
-    // Cercle extérieur (contour)
+    // Cercle principal
     ctx.strokeStyle = '#ff6b6b';
     ctx.lineWidth = 2 / state.zoom;
     ctx.setLineDash([4 / state.zoom, 4 / state.zoom]);
     ctx.beginPath();
     ctx.arc(point.x, point.y, size / 2, 0, Math.PI * 2);
     ctx.stroke();
-
-    // Cercle intérieur montrant la dureté
-    const hardnessRadius = (size / 2) * (state.eraserHardness / 100);
-    ctx.strokeStyle = 'rgba(255, 107, 107, 0.5)';
-    ctx.lineWidth = 1 / state.zoom;
     ctx.setLineDash([]);
+
+    // Remplissage semi-transparent
+    ctx.fillStyle = 'rgba(255, 107, 107, 0.15)';
     ctx.beginPath();
-    ctx.arc(point.x, point.y, hardnessRadius, 0, Math.PI * 2);
-    ctx.stroke();
+    ctx.arc(point.x, point.y, size / 2, 0, Math.PI * 2);
+    ctx.fill();
 
     // Point central
     ctx.fillStyle = '#ff6b6b';
     ctx.beginPath();
-    ctx.arc(point.x, point.y, 2 / state.zoom, 0, Math.PI * 2);
+    ctx.arc(point.x, point.y, 3 / state.zoom, 0, Math.PI * 2);
     ctx.fill();
-
-    ctx.restore();
-}
-
-// Dessiner un tracé d'effacement (pour le rendu)
-function drawEraserStroke(ctx, obj) {
-    if (!obj.points || obj.points.length === 0) return;
-
-    ctx.save();
-    ctx.globalCompositeOperation = 'destination-out';
-
-    const size = obj.size || 20;
-    const hardness = (obj.hardness || 100) / 100;
-    const opacity = (obj.opacity || 100) / 100;
-
-    // Dessiner chaque point du tracé
-    obj.points.forEach(point => {
-        const gradient = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, size / 2);
-        const innerRadius = hardness * 0.9;
-
-        gradient.addColorStop(0, `rgba(0, 0, 0, ${opacity})`);
-        gradient.addColorStop(innerRadius, `rgba(0, 0, 0, ${opacity})`);
-        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, size / 2, 0, Math.PI * 2);
-        ctx.fill();
-    });
 
     ctx.restore();
 }
@@ -1639,10 +1659,7 @@ function drawObject(ctx, obj) {
         case 'vector':
             drawVector(ctx, obj);
             break;
-        case 'eraser-stroke':
-            drawEraserStroke(ctx, obj);
-            break;
-    }
+            }
 
     ctx.restore();
 }
@@ -1894,6 +1911,9 @@ function initToolbar() {
 
     // Initialize eraser controls
     initEraserControls();
+
+    // Initialize brush/pencil controls
+    initBrushControls();
 }
 
 // Initialiser les contrôles de la gomme
@@ -1943,6 +1963,33 @@ function initEraserControls() {
             state.eraserOpacity = Math.min(100, Math.max(1, parseInt(this.value) || 100));
             eraserOpacitySlider.value = state.eraserOpacity;
             this.value = state.eraserOpacity;
+        });
+    }
+}
+
+// Initialiser les contrôles du pinceau/crayon
+function initBrushControls() {
+    // Taille du pinceau - slider
+    const brushSizeSlider = document.getElementById('brush-size');
+    const brushSizeNum = document.getElementById('brush-size-num');
+
+    if (brushSizeSlider && brushSizeNum) {
+        brushSizeSlider.addEventListener('input', function() {
+            state.brushSize = parseInt(this.value);
+            brushSizeNum.value = this.value;
+        });
+        brushSizeNum.addEventListener('change', function() {
+            state.brushSize = Math.min(100, Math.max(1, parseInt(this.value) || 4));
+            brushSizeSlider.value = state.brushSize;
+            this.value = state.brushSize;
+        });
+    }
+
+    // Couleur du pinceau
+    const brushColorInput = document.getElementById('brush-color');
+    if (brushColorInput) {
+        brushColorInput.addEventListener('input', function() {
+            state.brushColor = this.value;
         });
     }
 }
@@ -2108,6 +2155,12 @@ function selectTool(tool) {
         eraserOptions.style.display = tool === 'eraser' ? 'block' : 'none';
     }
 
+    // Show/hide brush options panel
+    const brushOptions = document.getElementById('brush-options');
+    if (brushOptions) {
+        brushOptions.style.display = tool === 'pencil' ? 'block' : 'none';
+    }
+
     // Update cursor
     state.canvas.style.cursor = getCursorForTool(tool);
 }
@@ -2174,6 +2227,65 @@ function initPanels() {
 
     // Color picker
     initColorPicker();
+
+    // Mobile panel toggles
+    initMobilePanelToggles();
+}
+
+// Mobile panel toggle functionality
+function initMobilePanelToggles() {
+    const leftPanel = document.getElementById('left-panel');
+    const rightPanel = document.getElementById('right-panel');
+    const toggleLeftBtn = document.getElementById('toggle-left-panel');
+    const toggleRightBtn = document.getElementById('toggle-right-panel');
+    const overlay = document.getElementById('mobile-overlay');
+
+    if (!toggleLeftBtn || !toggleRightBtn) return;
+
+    // Toggle left panel
+    toggleLeftBtn.addEventListener('click', function() {
+        const isOpen = leftPanel.classList.toggle('open');
+        // Close right panel if open
+        if (isOpen) {
+            rightPanel.classList.remove('open');
+        }
+        updateOverlay();
+    });
+
+    // Toggle right panel
+    toggleRightBtn.addEventListener('click', function() {
+        const isOpen = rightPanel.classList.toggle('open');
+        // Close left panel if open
+        if (isOpen) {
+            leftPanel.classList.remove('open');
+        }
+        updateOverlay();
+    });
+
+    // Close panels when clicking overlay
+    if (overlay) {
+        overlay.addEventListener('click', function() {
+            leftPanel.classList.remove('open');
+            rightPanel.classList.remove('open');
+            updateOverlay();
+        });
+    }
+
+    function updateOverlay() {
+        if (overlay) {
+            const anyOpen = leftPanel.classList.contains('open') || rightPanel.classList.contains('open');
+            overlay.style.display = anyOpen ? 'block' : 'none';
+        }
+    }
+
+    // Close panels on window resize to desktop
+    window.addEventListener('resize', function() {
+        if (window.innerWidth > 900) {
+            leftPanel.classList.remove('open');
+            rightPanel.classList.remove('open');
+            if (overlay) overlay.style.display = 'none';
+        }
+    });
 }
 
 function initLayerSearch() {
