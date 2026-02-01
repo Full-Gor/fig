@@ -4166,6 +4166,12 @@ function generateCSSStyles(objects) {
 
     objects.forEach((obj, index) => {
         const className = sanitizeClassName(obj.name || `element-${index}`);
+
+        // Skip path/vector/line types - they use inline SVG styles
+        if (obj.type === 'path' || obj.type === 'vector' || obj.type === 'line') {
+            return; // SVG elements have inline styles
+        }
+
         let style = `        .${className} {\n`;
         style += `            position: absolute;\n`;
         style += `            left: ${Math.round(obj.x)}px;\n`;
@@ -4235,12 +4241,35 @@ function generateHTMLElements(objects) {
             case 'text':
                 html += `${indent}<p class="${className}">${escapeHTML(obj.text || '')}</p>\n`;
                 break;
+
             case 'image':
                 html += `${indent}<img class="${className}" src="${obj.src || ''}" alt="${obj.name || 'image'}">\n`;
                 break;
+
             case 'frame':
                 html += `${indent}<div class="${className}" data-type="frame"></div>\n`;
                 break;
+
+            case 'line':
+                // Export line as SVG
+                html += generateLineSVG(obj, className, indent);
+                break;
+
+            case 'path':
+                // Export pencil path as SVG
+                html += generatePathSVG(obj, className, indent);
+                break;
+
+            case 'vector':
+                // Export pen vector as SVG
+                html += generateVectorSVG(obj, className, indent);
+                break;
+
+            case 'ellipse':
+                // Ellipse uses div with border-radius in CSS
+                html += `${indent}<div class="${className}"></div>\n`;
+                break;
+
             default:
                 html += `${indent}<div class="${className}"></div>\n`;
                 break;
@@ -4248,6 +4277,130 @@ function generateHTMLElements(objects) {
     });
 
     return html;
+}
+
+// Generate SVG for line elements
+function generateLineSVG(obj, className, indent) {
+    const stroke = obj.stroke || '#000000';
+    const strokeWidth = obj.strokeWidth || 2;
+    const padding = strokeWidth;
+
+    // Calculate line dimensions
+    const width = Math.max(Math.abs(obj.width), 1) + padding * 2;
+    const height = Math.max(Math.abs(obj.height), 1) + padding * 2;
+
+    // Line endpoints relative to SVG
+    const x1 = padding;
+    const y1 = padding;
+    const x2 = Math.abs(obj.width) + padding;
+    const y2 = Math.abs(obj.height) + padding;
+
+    return `${indent}<svg class="${className}" width="${width}" height="${height}" style="position:absolute;left:${Math.round(obj.x)}px;top:${Math.round(obj.y)}px;overflow:visible;">
+${indent}    <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round"/>
+${indent}</svg>\n`;
+}
+
+// Generate SVG for pencil path elements
+function generatePathSVG(obj, className, indent) {
+    if (!obj.points || obj.points.length < 2) {
+        return `${indent}<!-- Path ${className} sans points -->\n`;
+    }
+
+    const stroke = obj.stroke || '#000000';
+    const strokeWidth = obj.strokeWidth || 2;
+    const fill = obj.fill && obj.fill !== 'transparent' ? obj.fill : 'none';
+
+    // Calculate bounding box of points
+    const bounds = calculatePointsBounds(obj.points);
+    const padding = strokeWidth * 2;
+    const width = Math.max(bounds.width + padding * 2, 10);
+    const height = Math.max(bounds.height + padding * 2, 10);
+
+    // Translate points relative to SVG origin
+    const offsetX = bounds.minX - padding;
+    const offsetY = bounds.minY - padding;
+    const pathD = pointsToSVGPath(obj.points, offsetX, offsetY);
+
+    return `${indent}<svg class="${className}" width="${width}" height="${height}" style="position:absolute;left:${Math.round(bounds.minX - padding)}px;top:${Math.round(bounds.minY - padding)}px;overflow:visible;">
+${indent}    <path d="${pathD}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round"/>
+${indent}</svg>\n`;
+}
+
+// Generate SVG for pen vector elements
+function generateVectorSVG(obj, className, indent) {
+    if (!obj.points || obj.points.length < 2) {
+        return `${indent}<!-- Vector ${className} sans points -->\n`;
+    }
+
+    const stroke = obj.stroke || '#000000';
+    const strokeWidth = obj.strokeWidth || 2;
+    const fill = obj.fill && obj.fill !== 'transparent' ? obj.fill : 'none';
+
+    // Calculate bounding box
+    const bounds = calculatePointsBounds(obj.points);
+    const padding = strokeWidth * 2;
+    const width = Math.max(bounds.width + padding * 2, 10);
+    const height = Math.max(bounds.height + padding * 2, 10);
+
+    // Translate points relative to SVG origin
+    const offsetX = bounds.minX - padding;
+    const offsetY = bounds.minY - padding;
+    const pathD = pointsToSVGPath(obj.points, offsetX, offsetY, obj.closed);
+
+    return `${indent}<svg class="${className}" width="${width}" height="${height}" style="position:absolute;left:${Math.round(bounds.minX - padding)}px;top:${Math.round(bounds.minY - padding)}px;overflow:visible;">
+${indent}    <path d="${pathD}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round"/>
+${indent}</svg>\n`;
+}
+
+// Convert points array to SVG path data string
+function pointsToSVGPath(points, offsetX, offsetY, closed) {
+    if (!points || points.length === 0) return '';
+
+    offsetX = offsetX || 0;
+    offsetY = offsetY || 0;
+
+    let d = 'M ' + (points[0].x - offsetX).toFixed(1) + ' ' + (points[0].y - offsetY).toFixed(1);
+
+    for (let i = 1; i < points.length; i++) {
+        var p = points[i];
+        if (p && typeof p.x === 'number' && typeof p.y === 'number') {
+            d += ' L ' + (p.x - offsetX).toFixed(1) + ' ' + (p.y - offsetY).toFixed(1);
+        }
+    }
+
+    if (closed) {
+        d += ' Z';
+    }
+
+    return d;
+}
+
+// Calculate bounding box of points
+function calculatePointsBounds(points) {
+    if (!points || points.length === 0) {
+        return { minX: 0, minY: 0, maxX: 0, maxY: 0, width: 0, height: 0 };
+    }
+
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    for (var i = 0; i < points.length; i++) {
+        var p = points[i];
+        if (p && typeof p.x === 'number' && typeof p.y === 'number') {
+            if (p.x < minX) minX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y > maxY) maxY = p.y;
+        }
+    }
+
+    return {
+        minX: minX,
+        minY: minY,
+        maxX: maxX,
+        maxY: maxY,
+        width: maxX - minX,
+        height: maxY - minY
+    };
 }
 
 function generateJSX() {
@@ -4281,6 +4434,12 @@ function generateJSXStyles(objects) {
 
     objects.forEach((obj, index) => {
         const styleName = camelCase(obj.name || `element${index}`);
+
+        // Skip path/vector/line types - they use inline styles in SVG
+        if (obj.type === 'path' || obj.type === 'vector' || obj.type === 'line') {
+            return;
+        }
+
         let style = `    ${styleName}: {\n`;
         style += `        position: 'absolute',\n`;
         style += `        left: ${Math.round(obj.x)},\n`;
@@ -4342,9 +4501,27 @@ function generateJSXElements(objects) {
             case 'text':
                 jsx += `${indent}<p style={styles.${styleName}}>${escapeHTML(obj.text || '')}</p>\n`;
                 break;
+
             case 'image':
                 jsx += `${indent}<img style={styles.${styleName}} src="${obj.src || ''}" alt="${obj.name || 'image'}" />\n`;
                 break;
+
+            case 'line':
+                jsx += generateLineJSX(obj, indent);
+                break;
+
+            case 'path':
+                jsx += generatePathJSX(obj, indent);
+                break;
+
+            case 'vector':
+                jsx += generateVectorJSX(obj, indent);
+                break;
+
+            case 'ellipse':
+                jsx += `${indent}<div style={styles.${styleName}} />\n`;
+                break;
+
             default:
                 jsx += `${indent}<div style={styles.${styleName}} />\n`;
                 break;
@@ -4352,6 +4529,67 @@ function generateJSXElements(objects) {
     });
 
     return jsx;
+}
+
+// Generate JSX SVG for line elements
+function generateLineJSX(obj, indent) {
+    const stroke = obj.stroke || '#000000';
+    const strokeWidth = obj.strokeWidth || 2;
+    const padding = strokeWidth;
+    const width = Math.max(Math.abs(obj.width), 1) + padding * 2;
+    const height = Math.max(Math.abs(obj.height), 1) + padding * 2;
+
+    return `${indent}<svg width={${width}} height={${height}} style={{position: 'absolute', left: ${Math.round(obj.x)}, top: ${Math.round(obj.y)}, overflow: 'visible'}}>
+${indent}    <line x1={${padding}} y1={${padding}} x2={${Math.abs(obj.width) + padding}} y2={${Math.abs(obj.height) + padding}} stroke="${stroke}" strokeWidth={${strokeWidth}} strokeLinecap="round" />
+${indent}</svg>\n`;
+}
+
+// Generate JSX SVG for path elements
+function generatePathJSX(obj, indent) {
+    if (!obj.points || obj.points.length < 2) {
+        return `${indent}{/* Path sans points */}\n`;
+    }
+
+    const stroke = obj.stroke || '#000000';
+    const strokeWidth = obj.strokeWidth || 2;
+    const fill = obj.fill && obj.fill !== 'transparent' ? obj.fill : 'none';
+
+    const bounds = calculatePointsBounds(obj.points);
+    const padding = strokeWidth * 2;
+    const width = Math.max(bounds.width + padding * 2, 10);
+    const height = Math.max(bounds.height + padding * 2, 10);
+
+    const offsetX = bounds.minX - padding;
+    const offsetY = bounds.minY - padding;
+    const pathD = pointsToSVGPath(obj.points, offsetX, offsetY);
+
+    return `${indent}<svg width={${width}} height={${height}} style={{position: 'absolute', left: ${Math.round(bounds.minX - padding)}, top: ${Math.round(bounds.minY - padding)}, overflow: 'visible'}}>
+${indent}    <path d="${pathD}" fill="${fill}" stroke="${stroke}" strokeWidth={${strokeWidth}} strokeLinecap="round" strokeLinejoin="round" />
+${indent}</svg>\n`;
+}
+
+// Generate JSX SVG for vector elements
+function generateVectorJSX(obj, indent) {
+    if (!obj.points || obj.points.length < 2) {
+        return `${indent}{/* Vector sans points */}\n`;
+    }
+
+    const stroke = obj.stroke || '#000000';
+    const strokeWidth = obj.strokeWidth || 2;
+    const fill = obj.fill && obj.fill !== 'transparent' ? obj.fill : 'none';
+
+    const bounds = calculatePointsBounds(obj.points);
+    const padding = strokeWidth * 2;
+    const width = Math.max(bounds.width + padding * 2, 10);
+    const height = Math.max(bounds.height + padding * 2, 10);
+
+    const offsetX = bounds.minX - padding;
+    const offsetY = bounds.minY - padding;
+    const pathD = pointsToSVGPath(obj.points, offsetX, offsetY, obj.closed);
+
+    return `${indent}<svg width={${width}} height={${height}} style={{position: 'absolute', left: ${Math.round(bounds.minX - padding)}, top: ${Math.round(bounds.minY - padding)}, overflow: 'visible'}}>
+${indent}    <path d="${pathD}" fill="${fill}" stroke="${stroke}" strokeWidth={${strokeWidth}} strokeLinecap="round" strokeLinejoin="round" />
+${indent}</svg>\n`;
 }
 
 // Helper functions for code generation
