@@ -607,6 +607,80 @@ body {
     font-size: 11px;
 }
 
+/* Full width property field for sliders */
+.property-field.full-width {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+}
+
+.property-field.full-width label {
+    margin-bottom: 4px;
+}
+
+.property-field.full-width input[type="range"] {
+    width: 100%;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--bg-tertiary);
+    border-radius: 2px;
+    outline: none;
+    padding: 0;
+    margin: 8px 0;
+}
+
+.property-field.full-width input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--accent-color);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.property-field.full-width input[type="range"]::-webkit-slider-thumb:hover {
+    background: var(--accent-hover);
+    transform: scale(1.1);
+}
+
+.property-field.full-width input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: var(--accent-color);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+.property-field.full-width input[type="number"] {
+    width: 60px;
+    flex: none;
+}
+
+/* Eraser options section */
+#eraser-options .property-row {
+    margin-bottom: 12px;
+}
+
+#eraser-options .property-field {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+#eraser-options input[type="range"] {
+    flex: 1;
+    min-width: 100px;
+}
+
+#eraser-options input[type="number"] {
+    width: 50px;
+    flex: none;
+}
+
 .lock-btn {
     width: 24px;
     height: 24px;

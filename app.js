@@ -66,6 +66,12 @@ const state = {
     defaultOpacity: 100,
     defaultCornerRadius: 0,
 
+    // Eraser options
+    eraserSize: 20,
+    eraserHardness: 100,
+    eraserOpacity: 100,
+    lastEraserPoint: null,
+
     // Layer counter
     layerCounter: 0
 };
@@ -396,8 +402,8 @@ function handleMouseMove(e) {
         if (state.tempObject.type === 'path') {
             // Pencil drawing - add points
             state.tempObject.points.push(point);
-        } else if (state.tempObject.type === 'eraser') {
-            // Eraser tool - handled separately
+        } else if (state.tempObject.type === 'eraser-stroke') {
+            // Eraser tool - handled separately with interpolation
             handleEraserToolMove(point);
             return;
         } else {
@@ -449,7 +455,7 @@ function handleMouseUp(e) {
     }
 
     if (state.isDrawing && state.tempObject) {
-        if (state.tempObject.type === 'eraser') {
+        if (state.tempObject.type === 'eraser-stroke') {
             handleEraserToolUp();
         } else {
             finalizeObject();
@@ -793,112 +799,168 @@ function drawPenPreview() {
 }
 
 // ========================================
-// ERASER TOOL
+// ERASER TOOL - Effacement pixel par pixel
 // ========================================
 
 function handleEraserToolDown(point) {
     state.isDrawing = true;
+    state.lastEraserPoint = { x: point.x, y: point.y };
+
+    // Créer un objet eraser-stroke pour stocker le tracé d'effacement
     state.tempObject = {
-        type: 'eraser',
+        id: generateId(),
+        type: 'eraser-stroke',
         points: [{ x: point.x, y: point.y }],
-        size: 20 // Default eraser size
+        size: state.eraserSize,
+        hardness: state.eraserHardness,
+        opacity: state.eraserOpacity,
+        name: getObjectName('eraser')
     };
+
+    // Dessiner le premier point d'effacement
+    drawEraserPoint(point.x, point.y);
+    render();
+    drawEraserCursor(point);
 }
 
 function handleEraserToolMove(point) {
-    if (!state.isDrawing || !state.tempObject || state.tempObject.type !== 'eraser') return;
+    if (!state.isDrawing || !state.tempObject || state.tempObject.type !== 'eraser-stroke') return;
 
-    state.tempObject.points.push(point);
+    // Interpoler les points pour un tracé fluide (éviter les trous)
+    if (state.lastEraserPoint) {
+        const dx = point.x - state.lastEraserPoint.x;
+        const dy = point.y - state.lastEraserPoint.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const step = Math.max(1, state.eraserSize / 4); // Plus le brush est grand, plus on espace les points
 
-    // Erase objects that intersect with the eraser path
-    const eraserSize = state.tempObject.size;
-    const lastPoint = point;
+        if (distance > step) {
+            const steps = Math.ceil(distance / step);
+            for (let i = 1; i <= steps; i++) {
+                const t = i / steps;
+                const interpX = state.lastEraserPoint.x + dx * t;
+                const interpY = state.lastEraserPoint.y + dy * t;
 
-    // Find and remove objects under the eraser
-    const objectsToRemove = [];
-
-    state.objects.forEach(obj => {
-        const bounds = getObjectBounds(obj);
-
-        // Check if the eraser point is within the object bounds (with padding for eraser size)
-        if (lastPoint.x >= bounds.x - eraserSize &&
-            lastPoint.x <= bounds.x + bounds.width + eraserSize &&
-            lastPoint.y >= bounds.y - eraserSize &&
-            lastPoint.y <= bounds.y + bounds.height + eraserSize) {
-            objectsToRemove.push(obj);
-        }
-    });
-
-    // Remove objects that were touched by the eraser
-    objectsToRemove.forEach(obj => {
-        const index = state.objects.indexOf(obj);
-        if (index > -1) {
-            state.objects.splice(index, 1);
-            // Also remove from selection if selected
-            const selIndex = state.selectedObjects.indexOf(obj);
-            if (selIndex > -1) {
-                state.selectedObjects.splice(selIndex, 1);
+                state.tempObject.points.push({ x: interpX, y: interpY });
+                drawEraserPoint(interpX, interpY);
             }
+        } else {
+            state.tempObject.points.push({ x: point.x, y: point.y });
+            drawEraserPoint(point.x, point.y);
         }
-    });
-
-    if (objectsToRemove.length > 0) {
-        render();
-        drawEraserPreview();
-    } else {
-        render();
-        drawEraserPreview();
     }
+
+    state.lastEraserPoint = { x: point.x, y: point.y };
+    render();
+    drawEraserCursor(point);
 }
 
 function handleEraserToolUp() {
-    if (!state.isDrawing || !state.tempObject || state.tempObject.type !== 'eraser') return;
+    if (!state.isDrawing || !state.tempObject || state.tempObject.type !== 'eraser-stroke') return;
+
+    // Ajouter le tracé d'effacement aux objets
+    if (state.tempObject.points.length > 0) {
+        state.objects.push(state.tempObject);
+        saveHistory();
+        updateLayersPanel();
+    }
 
     state.isDrawing = false;
     state.tempObject = null;
+    state.lastEraserPoint = null;
 
-    saveHistory();
-    updateLayersPanel();
-    updatePropertiesPanel();
     render();
 }
 
-function drawEraserPreview() {
-    if (!state.tempObject || state.tempObject.type !== 'eraser') return;
-
+// Dessiner un point d'effacement avec taille, dureté et opacité
+function drawEraserPoint(x, y) {
     const ctx = state.ctx;
-    const points = state.tempObject.points;
-    if (points.length === 0) return;
+    const size = state.eraserSize;
+    const hardness = state.eraserHardness / 100;
+    const opacity = state.eraserOpacity / 100;
 
     ctx.save();
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.zoom, state.zoom);
 
-    // Draw eraser cursor at last point
-    const lastPoint = points[points.length - 1];
-    const size = state.tempObject.size;
+    // Mode effacement
+    ctx.globalCompositeOperation = 'destination-out';
 
+    // Créer un gradient radial pour simuler la dureté
+    const gradient = ctx.createRadialGradient(x, y, 0, x, y, size / 2);
+    const innerRadius = hardness * 0.9; // Zone nette au centre
+
+    gradient.addColorStop(0, `rgba(0, 0, 0, ${opacity})`);
+    gradient.addColorStop(innerRadius, `rgba(0, 0, 0, ${opacity})`);
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); // Bords flous
+
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+// Dessiner le curseur de la gomme
+function drawEraserCursor(point) {
+    const ctx = state.ctx;
+    const size = state.eraserSize;
+
+    ctx.save();
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.zoom, state.zoom);
+
+    // Cercle extérieur (contour)
     ctx.strokeStyle = '#ff6b6b';
     ctx.lineWidth = 2 / state.zoom;
-    ctx.setLineDash([5 / state.zoom, 5 / state.zoom]);
+    ctx.setLineDash([4 / state.zoom, 4 / state.zoom]);
     ctx.beginPath();
-    ctx.arc(lastPoint.x, lastPoint.y, size / 2, 0, Math.PI * 2);
+    ctx.arc(point.x, point.y, size / 2, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.setLineDash([]);
 
-    // Draw eraser path
-    if (points.length > 1) {
-        ctx.strokeStyle = 'rgba(255, 107, 107, 0.5)';
-        ctx.lineWidth = size;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
+    // Cercle intérieur montrant la dureté
+    const hardnessRadius = (size / 2) * (state.eraserHardness / 100);
+    ctx.strokeStyle = 'rgba(255, 107, 107, 0.5)';
+    ctx.lineWidth = 1 / state.zoom;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, hardnessRadius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Point central
+    ctx.fillStyle = '#ff6b6b';
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 2 / state.zoom, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+// Dessiner un tracé d'effacement (pour le rendu)
+function drawEraserStroke(ctx, obj) {
+    if (!obj.points || obj.points.length === 0) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+
+    const size = obj.size || 20;
+    const hardness = (obj.hardness || 100) / 100;
+    const opacity = (obj.opacity || 100) / 100;
+
+    // Dessiner chaque point du tracé
+    obj.points.forEach(point => {
+        const gradient = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, size / 2);
+        const innerRadius = hardness * 0.9;
+
+        gradient.addColorStop(0, `rgba(0, 0, 0, ${opacity})`);
+        gradient.addColorStop(innerRadius, `rgba(0, 0, 0, ${opacity})`);
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+        ctx.fillStyle = gradient;
         ctx.beginPath();
-        ctx.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) {
-            ctx.lineTo(points[i].x, points[i].y);
-        }
-        ctx.stroke();
-    }
+        ctx.arc(point.x, point.y, size / 2, 0, Math.PI * 2);
+        ctx.fill();
+    });
 
     ctx.restore();
 }
@@ -1577,6 +1639,9 @@ function drawObject(ctx, obj) {
         case 'vector':
             drawVector(ctx, obj);
             break;
+        case 'eraser-stroke':
+            drawEraserStroke(ctx, obj);
+            break;
     }
 
     ctx.restore();
@@ -1826,6 +1891,60 @@ function initToolbar() {
     if (presentBtn) {
         presentBtn.addEventListener('click', togglePresentMode);
     }
+
+    // Initialize eraser controls
+    initEraserControls();
+}
+
+// Initialiser les contrôles de la gomme
+function initEraserControls() {
+    // Taille de la gomme - slider
+    const eraserSizeSlider = document.getElementById('eraser-size');
+    const eraserSizeNum = document.getElementById('eraser-size-num');
+
+    if (eraserSizeSlider && eraserSizeNum) {
+        eraserSizeSlider.addEventListener('input', function() {
+            state.eraserSize = parseInt(this.value);
+            eraserSizeNum.value = this.value;
+        });
+        eraserSizeNum.addEventListener('change', function() {
+            state.eraserSize = Math.min(200, Math.max(1, parseInt(this.value) || 20));
+            eraserSizeSlider.value = state.eraserSize;
+            this.value = state.eraserSize;
+        });
+    }
+
+    // Dureté de la gomme - slider
+    const eraserHardnessSlider = document.getElementById('eraser-hardness');
+    const eraserHardnessNum = document.getElementById('eraser-hardness-num');
+
+    if (eraserHardnessSlider && eraserHardnessNum) {
+        eraserHardnessSlider.addEventListener('input', function() {
+            state.eraserHardness = parseInt(this.value);
+            eraserHardnessNum.value = this.value;
+        });
+        eraserHardnessNum.addEventListener('change', function() {
+            state.eraserHardness = Math.min(100, Math.max(0, parseInt(this.value) || 100));
+            eraserHardnessSlider.value = state.eraserHardness;
+            this.value = state.eraserHardness;
+        });
+    }
+
+    // Opacité de la gomme - slider
+    const eraserOpacitySlider = document.getElementById('eraser-opacity');
+    const eraserOpacityNum = document.getElementById('eraser-opacity-num');
+
+    if (eraserOpacitySlider && eraserOpacityNum) {
+        eraserOpacitySlider.addEventListener('input', function() {
+            state.eraserOpacity = parseInt(this.value);
+            eraserOpacityNum.value = this.value;
+        });
+        eraserOpacityNum.addEventListener('change', function() {
+            state.eraserOpacity = Math.min(100, Math.max(1, parseInt(this.value) || 100));
+            eraserOpacitySlider.value = state.eraserOpacity;
+            this.value = state.eraserOpacity;
+        });
+    }
 }
 
 // Presentation mode - fullscreen presentation of the design
@@ -1982,6 +2101,12 @@ function selectTool(tool) {
     document.querySelectorAll('.tool-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.tool === tool);
     });
+
+    // Show/hide eraser options panel
+    const eraserOptions = document.getElementById('eraser-options');
+    if (eraserOptions) {
+        eraserOptions.style.display = tool === 'eraser' ? 'block' : 'none';
+    }
 
     // Update cursor
     state.canvas.style.cursor = getCursorForTool(tool);
