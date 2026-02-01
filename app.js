@@ -863,26 +863,132 @@ function handleEraserToolUp() {
 function eraseObjectsAtPoint(point) {
     const eraserRadius = state.eraserSize / 2;
     const objectsToRemove = [];
+    const newPathSegments = [];
 
-    state.objects.forEach(obj => {
-        // Vérifier si le point est dans l'objet
-        if (isPointInObject(point, obj, eraserRadius)) {
-            objectsToRemove.push(obj);
+    for (let i = state.objects.length - 1; i >= 0; i--) {
+        const obj = state.objects[i];
+
+        // Pour les paths (tracés au crayon), effacement par segments
+        if ((obj.type === 'path' || obj.type === 'vector') && obj.points && obj.points.length > 1) {
+            const result = erasePathSegments(obj, point, eraserRadius);
+
+            if (result.modified) {
+                // Retirer l'objet original
+                state.objects.splice(i, 1);
+
+                // Retirer de la sélection
+                const selIndex = state.selectedObjects.indexOf(obj);
+                if (selIndex > -1) {
+                    state.selectedObjects.splice(selIndex, 1);
+                }
+
+                // Ajouter les nouveaux segments (s'il y en a)
+                result.segments.forEach(seg => {
+                    if (seg.points.length >= 2) {
+                        newPathSegments.push(seg);
+                    }
+                });
+            }
+        } else {
+            // Pour les autres objets, suppression complète si touché
+            if (isPointInObject(point, obj, eraserRadius)) {
+                objectsToRemove.push(obj);
+            }
         }
-    });
+    }
 
-    // Supprimer les objets touchés
+    // Supprimer les objets non-path touchés
     objectsToRemove.forEach(obj => {
         const index = state.objects.indexOf(obj);
         if (index > -1) {
             state.objects.splice(index, 1);
-            // Retirer de la sélection aussi
             const selIndex = state.selectedObjects.indexOf(obj);
             if (selIndex > -1) {
                 state.selectedObjects.splice(selIndex, 1);
             }
         }
     });
+
+    // Ajouter les nouveaux segments de path
+    newPathSegments.forEach(seg => {
+        state.objects.push(seg);
+    });
+}
+
+// Effacer des segments d'un path et retourner les parties restantes
+function erasePathSegments(obj, eraserPoint, eraserRadius) {
+    const points = obj.points;
+    const strokeWidth = obj.strokeWidth || 2;
+    const hitRadius = eraserRadius + strokeWidth / 2;
+
+    // Trouver les indices des points à effacer
+    const pointsToErase = new Set();
+
+    for (let i = 0; i < points.length; i++) {
+        const p = points[i];
+        const dist = Math.sqrt((eraserPoint.x - p.x) ** 2 + (eraserPoint.y - p.y) ** 2);
+        if (dist <= hitRadius) {
+            pointsToErase.add(i);
+        }
+    }
+
+    // Vérifier aussi les segments entre les points
+    for (let i = 0; i < points.length - 1; i++) {
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const dist = distanceToLineSegment(eraserPoint.x, eraserPoint.y, p1.x, p1.y, p2.x, p2.y);
+        if (dist <= hitRadius) {
+            pointsToErase.add(i);
+            pointsToErase.add(i + 1);
+        }
+    }
+
+    if (pointsToErase.size === 0) {
+        return { modified: false, segments: [] };
+    }
+
+    // Créer les segments restants
+    const segments = [];
+    let currentSegment = [];
+
+    for (let i = 0; i < points.length; i++) {
+        if (!pointsToErase.has(i)) {
+            currentSegment.push({ ...points[i] });
+        } else {
+            // Point effacé - terminer le segment courant s'il existe
+            if (currentSegment.length >= 2) {
+                segments.push(createPathSegment(obj, currentSegment));
+            }
+            currentSegment = [];
+        }
+    }
+
+    // Ajouter le dernier segment s'il existe
+    if (currentSegment.length >= 2) {
+        segments.push(createPathSegment(obj, currentSegment));
+    }
+
+    return { modified: true, segments: segments };
+}
+
+// Créer un nouveau segment de path à partir de points
+function createPathSegment(originalObj, points) {
+    const bounds = calculatePointsBounds(points);
+    return {
+        id: generateId(),
+        type: originalObj.type,
+        x: bounds.minX,
+        y: bounds.minY,
+        width: bounds.maxX - bounds.minX,
+        height: bounds.maxY - bounds.minY,
+        points: points,
+        stroke: originalObj.stroke,
+        strokeWidth: originalObj.strokeWidth,
+        fill: originalObj.fill || 'transparent',
+        opacity: originalObj.opacity || 100,
+        rotation: 0,
+        name: getObjectName(originalObj.type)
+    };
 }
 
 // Vérifier si un point touche un objet (avec marge de la gomme)
@@ -2230,6 +2336,9 @@ function initPanels() {
 
     // Mobile panel toggles
     initMobilePanelToggles();
+
+    // Mobile menu drawer
+    initMobileMenu();
 }
 
 // Mobile panel toggle functionality
@@ -2286,6 +2395,117 @@ function initMobilePanelToggles() {
             if (overlay) overlay.style.display = 'none';
         }
     });
+}
+
+// Mobile menu drawer functionality
+function initMobileMenu() {
+    const menuBtn = document.getElementById('mobile-menu-btn');
+    const drawer = document.getElementById('mobile-menu-drawer');
+    const closeBtn = document.getElementById('mobile-menu-close');
+    const backdrop = document.getElementById('mobile-menu-backdrop');
+
+    if (!menuBtn || !drawer) return;
+
+    function openMenu() {
+        drawer.classList.add('open');
+        if (backdrop) backdrop.classList.add('visible');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeMenu() {
+        drawer.classList.remove('open');
+        if (backdrop) backdrop.classList.remove('visible');
+        document.body.style.overflow = '';
+    }
+
+    menuBtn.addEventListener('click', openMenu);
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeMenu);
+    }
+
+    if (backdrop) {
+        backdrop.addEventListener('click', closeMenu);
+    }
+
+    // Handle menu item clicks
+    drawer.querySelectorAll('.mobile-menu-item').forEach(item => {
+        item.addEventListener('click', function(e) {
+            e.preventDefault();
+
+            const action = this.dataset.action;
+            const tool = this.dataset.tool;
+
+            if (tool) {
+                selectTool(tool);
+                // Update active state
+                drawer.querySelectorAll('.mobile-menu-item[data-tool]').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+            } else if (action) {
+                handleMenuAction(action);
+            }
+
+            closeMenu();
+        });
+    });
+
+    // Close on window resize to desktop
+    window.addEventListener('resize', function() {
+        if (window.innerWidth > 1024) {
+            closeMenu();
+        }
+    });
+}
+
+// Handle menu actions from mobile menu
+function handleMenuAction(action) {
+    switch (action) {
+        case 'new-file':
+            newFile();
+            break;
+        case 'open-file':
+            openFile();
+            break;
+        case 'save-file':
+            saveFile();
+            break;
+        case 'export-file':
+            exportImage();
+            break;
+        case 'export-code':
+            exportCode();
+            break;
+        case 'undo':
+            undo();
+            break;
+        case 'redo':
+            redo();
+            break;
+        case 'copy':
+            copySelection();
+            break;
+        case 'paste':
+            pasteSelection();
+            break;
+        case 'delete':
+            deleteSelection();
+            break;
+        case 'zoom-in':
+            zoomIn();
+            break;
+        case 'zoom-out':
+            zoomOut();
+            break;
+        case 'zoom-fit':
+            zoomToFit();
+            break;
+        case 'zoom-100':
+            resetZoom();
+            break;
+        case 'help':
+            showHelpModal();
+            break;
+    }
 }
 
 function initLayerSearch() {

@@ -18,7 +18,13 @@
             <div class="logo">
                 <span class="logo-text">DesigneMe</span>
             </div>
-            <button class="icon-btn" id="new-file-btn" title="Nouveau fichier">
+            <!-- Mobile Menu Button -->
+            <button class="mobile-menu-btn" id="mobile-menu-btn" title="Menu">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+                </svg>
+            </button>
+            <button class="icon-btn desktop-only" id="new-file-btn" title="Nouveau fichier">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11zM11 13h2v3h3v2h-3v3h-2v-3H8v-2h3v-3z"/>
                 </svg>
@@ -69,6 +75,64 @@
             </div>
         </div>
     </header>
+
+    <!-- Mobile Menu Drawer -->
+    <div class="mobile-menu-drawer" id="mobile-menu-drawer">
+        <div class="mobile-menu-header">
+            <span>Menu</span>
+            <button class="mobile-menu-close" id="mobile-menu-close">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                </svg>
+            </button>
+        </div>
+        <div class="mobile-menu-content">
+            <div class="mobile-menu-section">
+                <div class="mobile-menu-section-title">Fichier</div>
+                <a href="#" class="mobile-menu-item" data-action="new-file">Nouveau fichier</a>
+                <a href="#" class="mobile-menu-item" data-action="open-file">Ouvrir</a>
+                <a href="#" class="mobile-menu-item" data-action="save-file">Sauvegarder</a>
+                <a href="#" class="mobile-menu-item" data-action="export-file">Exporter Image</a>
+                <a href="#" class="mobile-menu-item" data-action="export-code">Exporter Code</a>
+            </div>
+            <div class="mobile-menu-section">
+                <div class="mobile-menu-section-title">Édition</div>
+                <a href="#" class="mobile-menu-item" data-action="undo">Annuler</a>
+                <a href="#" class="mobile-menu-item" data-action="redo">Rétablir</a>
+                <a href="#" class="mobile-menu-item" data-action="copy">Copier</a>
+                <a href="#" class="mobile-menu-item" data-action="paste">Coller</a>
+                <a href="#" class="mobile-menu-item" data-action="delete">Supprimer</a>
+            </div>
+            <div class="mobile-menu-section">
+                <div class="mobile-menu-section-title">Vue</div>
+                <a href="#" class="mobile-menu-item" data-action="zoom-in">Zoom +</a>
+                <a href="#" class="mobile-menu-item" data-action="zoom-out">Zoom -</a>
+                <a href="#" class="mobile-menu-item" data-action="zoom-fit">Ajuster à l'écran</a>
+                <a href="#" class="mobile-menu-item" data-action="zoom-100">100%</a>
+            </div>
+            <div class="mobile-menu-section">
+                <div class="mobile-menu-section-title">Outils</div>
+                <a href="#" class="mobile-menu-item" data-tool="select">Sélection</a>
+                <a href="#" class="mobile-menu-item" data-tool="move">Déplacer</a>
+                <a href="#" class="mobile-menu-item" data-tool="frame">Cadre</a>
+                <a href="#" class="mobile-menu-item" data-tool="rectangle">Rectangle</a>
+                <a href="#" class="mobile-menu-item" data-tool="ellipse">Ellipse</a>
+                <a href="#" class="mobile-menu-item" data-tool="line">Ligne</a>
+                <a href="#" class="mobile-menu-item" data-tool="polygon">Polygone</a>
+                <a href="#" class="mobile-menu-item" data-tool="star">Étoile</a>
+                <a href="#" class="mobile-menu-item" data-tool="pen">Plume</a>
+                <a href="#" class="mobile-menu-item" data-tool="pencil">Crayon</a>
+                <a href="#" class="mobile-menu-item" data-tool="eraser">Gomme</a>
+                <a href="#" class="mobile-menu-item" data-tool="text">Texte</a>
+                <a href="#" class="mobile-menu-item" data-tool="image">Image</a>
+                <a href="#" class="mobile-menu-item" data-tool="comment">Commentaire</a>
+            </div>
+            <div class="mobile-menu-section">
+                <a href="#" class="mobile-menu-item" data-action="help">Guide d'aide</a>
+            </div>
+        </div>
+    </div>
+    <div class="mobile-menu-backdrop" id="mobile-menu-backdrop"></div>
 
     <div class="main-container">
         <!-- Left Toolbar -->
